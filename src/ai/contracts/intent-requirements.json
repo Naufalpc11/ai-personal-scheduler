@@ -1,0 +1,82 @@
+{
+  "version": "1.0",
+  "allowedIntents": [
+    "create_task",
+    "add_subtasks",
+    "auto_schedule",
+    "reschedule",
+    "recommend"
+  ],
+  "requirementsByIntent": {
+    "create_task": {
+      "required": [
+        "mainTask",
+        "subtasks",
+        "schedulingConstraints",
+        "meta"
+      ],
+      "optional": [
+        "estimatedDurationPerSubtask",
+        "schedulePlan",
+        "recommendations",
+        "reschedulePlan"
+      ]
+    },
+    "add_subtasks": {
+      "required": [
+        "mainTask",
+        "subtasks",
+        "meta"
+      ],
+      "optional": [
+        "estimatedDurationPerSubtask",
+        "schedulingConstraints",
+        "schedulePlan",
+        "recommendations",
+        "reschedulePlan"
+      ]
+    },
+    "auto_schedule": {
+      "required": [
+        "mainTask",
+        "subtasks",
+        "schedulingConstraints",
+        "schedulePlan",
+        "meta"
+      ],
+      "optional": [
+        "estimatedDurationPerSubtask",
+        "recommendations",
+        "reschedulePlan"
+      ]
+    },
+    "reschedule": {
+      "required": [
+        "mainTask",
+        "schedulingConstraints",
+        "reschedulePlan",
+        "meta"
+      ],
+      "optional": [
+        "subtasks",
+        "estimatedDurationPerSubtask",
+        "schedulePlan",
+        "recommendations"
+      ]
+    },
+    "recommend": {
+      "required": [
+        "recommendations",
+        "meta"
+      ],
+      "optional": [
+        "mainTask",
+        "subtasks",
+        "estimatedDurationPerSubtask",
+        "schedulingConstraints",
+        "schedulePlan",
+        "reschedulePlan"
+      ]
+    }
+  }
+}
