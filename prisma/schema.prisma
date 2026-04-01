@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  done
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  tasks Task[]
+
+  @@map("users")
+}
+
+model Task {
+  id          Int        @id @default(autoincrement())
+  userId      Int
+  title       String
+  description String?
+  status      TaskStatus @default(pending)
+  createdAt   DateTime   @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subtasks  Subtask[]
+  schedules Schedule[]
+
+  @@map("tasks")
+}
+
+model Subtask {
+  id          Int     @id @default(autoincrement())
+  taskId       Int
+  title        String
+  isCompleted  Boolean @default(false)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("subtasks")
+}
+
+model Schedule {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  startTime DateTime
+  endTime   DateTime
+  date      DateTime
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("schedules")
+}
