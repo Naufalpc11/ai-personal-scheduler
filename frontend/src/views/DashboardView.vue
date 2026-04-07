@@ -1,28 +1,10 @@
 <script setup>
-import { RouterLink } from 'vue-router'
+import AppSidebar from '../components/AppSidebar.vue'
 </script>
 
 <template>
-  <div class="dashboard-container">
-    <aside class="sidebar">
-      <div class="logo">
-        <h2>AI Scheduler</h2>
-      </div>
-      <nav class="menu">
-  <RouterLink to="/" class="menu-item" exact-active-class="active">Dashboard</RouterLink>
-  
-  <RouterLink to="/task-manager" class="menu-item" active-class="active">Task Manager</RouterLink>
-  <a href="#" class="menu-item">Schedule</a>
-  <a href="#" class="menu-item">AI Insights</a>
-</nav>
-      <div class="user-profile">
-        <div class="avatar">Z</div>
-        <div class="user-info">
-          <p class="name">Zee</p>
-          <p class="role">Admin</p>
-        </div>
-      </div>
-    </aside>
+  <div class="app-shell">
+    <AppSidebar />
 
     <main class="main-content">
       <header class="header">
@@ -87,49 +69,7 @@ import { RouterLink } from 'vue-router'
 </template>
 
 <style scoped>
-/* RESET & FONT BASE */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-.dashboard-container {
-  display: flex;
-  height: 100vh;
-  background-color: #EFECE3; /* Beige background */
-}
-
-/* SIDEBAR STYLES (Sama dengan Task Manager) */
-.sidebar {
-  width: 250px;
-  background-color: #1e1e2d;
-  color: white;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-}
-.logo h2 { font-size: 1.2rem; margin-bottom: 40px; color: #fff; }
-.menu { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-.menu-item {
-  color: #8b8b99;
-  text-decoration: none;
-  padding: 12px;
-  border-radius: 8px;
-  transition: 0.3s;
-}
-.menu-item:hover, .menu-item.active {
-  background-color: #4A70A9; /* Biru Tua */
-  color: white;
-}
-.user-profile { display: flex; align-items: center; gap: 12px; border-top: 1px solid #323248; padding-top: 20px; }
-.avatar { width: 40px; height: 40px; background-color: #4A70A9; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-.user-info .name { font-size: 0.9rem; font-weight: bold; }
-.user-info .role { font-size: 0.8rem; color: #8b8b99; }
-
 /* MAIN CONTENT */
-.main-content { flex: 1; padding: 30px; overflow-y: auto; }
 .header { margin-bottom: 30px; }
 .header h1 { font-size: 1.8rem; color: #000000; }
 .subtitle { color: #666; margin-top: 5px; }
@@ -173,4 +113,11 @@ import { RouterLink } from 'vue-router'
 .insight-list li::before { content: '✨'; position: absolute; left: 0; top: 0; font-size: 0.9rem; }
 .btn-outline-ai { background: transparent; border: 1px solid #4A70A9; color: #4A70A9; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; }
 .btn-outline-ai:hover { background: #4A70A9; color: white; }
+
+@media (max-width: 960px) {
+  .stats-grid,
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
