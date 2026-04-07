@@ -1,25 +1,84 @@
 <script setup>
 import { computed, ref } from 'vue'
 import AppSidebar from '../components/AppSidebar.vue'
+import { mockScheduleData } from '../data/mockSchedule'
 
-const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const hours = Array.from({ length: 13 }, (_, i) => i + 8)
 
-const displayedDate = ref(new Date(2026, 3, 1))
+const today = new Date()
+const displayedMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1))
+const displayedWeekIndex = ref(1)
 
-const events = ref([
-  { day: 0, start: 9, duration: 2, title: 'Kelas Pak Cahyo', category: 'kelas' },
-  { day: 0, start: 14, duration: 1, title: 'Review PR Github', category: 'review' },
-  { day: 2, start: 10, duration: 3, title: 'Client Meeting', category: 'meeting' },
-  { day: 4, start: 13, duration: 2, title: 'Beli Batagor', category: 'personal' }
-])
+const firstWeekOffset = computed(() => {
+  return (new Date(displayedMonth.value.getFullYear(), displayedMonth.value.getMonth(), 1).getDay() + 6) % 7
+})
 
 const monthLabel = computed(() =>
-  displayedDate.value.toLocaleDateString('id-ID', {
+  displayedMonth.value.toLocaleDateString('id-ID', {
     month: 'long',
     year: 'numeric'
   })
 )
+
+const daysInDisplayedMonth = computed(() => {
+  const year = displayedMonth.value.getFullYear()
+  const month = displayedMonth.value.getMonth()
+  return new Date(year, month + 1, 0).getDate()
+})
+
+const totalWeeksInMonth = computed(() => {
+  return Math.ceil((firstWeekOffset.value + daysInDisplayedMonth.value) / 7)
+})
+
+function getWeekIndexForDate(date) {
+  const offset = (new Date(date.getFullYear(), date.getMonth(), 1).getDay() + 6) % 7
+  return Math.floor((offset + date.getDate() - 1) / 7) + 1
+}
+
+if (
+  today.getFullYear() === displayedMonth.value.getFullYear() &&
+  today.getMonth() === displayedMonth.value.getMonth()
+) {
+  displayedWeekIndex.value = getWeekIndexForDate(today)
+}
+
+const weekInfo = computed(() => {
+  const year = displayedMonth.value.getFullYear()
+  const month = displayedMonth.value.getMonth()
+  const gridStartDate = new Date(year, month, 1 - firstWeekOffset.value)
+  const weekStartDate = new Date(gridStartDate)
+  weekStartDate.setDate(gridStartDate.getDate() + (displayedWeekIndex.value - 1) * 7)
+
+  const weekEndDate = new Date(weekStartDate)
+  weekEndDate.setDate(weekStartDate.getDate() + 6)
+
+  return {
+    weekStartDate,
+    weekEndDate
+  }
+})
+
+const weekDays = computed(() => {
+  const result = []
+  const month = displayedMonth.value.getMonth()
+  const weekStart = weekInfo.value.weekStartDate
+
+  for (let i = 0; i < 7; i += 1) {
+    const date = new Date(weekStart)
+    date.setDate(weekStart.getDate() + i)
+    const inCurrentMonth = date.getMonth() === month
+
+    result.push({
+      key: `${toDateKey(date)}-${i}`,
+      dateKey: toDateKey(date),
+      dayNumber: date.getDate(),
+      weekdayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      inCurrentMonth
+    })
+  }
+
+  return result
+})
 
 const eventClassMap = {
   kelas: 'event-kelas',
@@ -35,25 +94,58 @@ const legendItems = [
   { key: 'personal', label: 'Personal' }
 ]
 
-function prevMonth() {
-  const date = new Date(displayedDate.value)
-  date.setMonth(date.getMonth() - 1)
-  displayedDate.value = date
+// Transform mock data: date string + time -> day index + hour + duration
+const processedEvents = computed(() => {
+  const result = []
+  const weekStartKey = toDateKey(weekInfo.value.weekStartDate)
+  const weekEndKey = toDateKey(weekInfo.value.weekEndDate)
+
+  mockScheduleData.forEach((item) => {
+    if (item.date >= weekStartKey && item.date <= weekEndKey) {
+      const hour = parseHour(item.time)
+      result.push({
+        date: item.date,
+        start: hour,
+        duration: 1,
+        title: item.title,
+        category: item.category || 'kelas'
+      })
+    }
+  })
+
+  return result
+})
+
+function previousMonth() {
+  if (displayedWeekIndex.value > 1) {
+    displayedWeekIndex.value -= 1
+    return
+  }
+
+  const prevMonth = new Date(displayedMonth.value)
+  prevMonth.setMonth(prevMonth.getMonth() - 1)
+  displayedMonth.value = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 1)
+  displayedWeekIndex.value = totalWeeksInMonth.value
 }
 
 function nextMonth() {
-  const date = new Date(displayedDate.value)
-  date.setMonth(date.getMonth() + 1)
-  displayedDate.value = date
+  if (displayedWeekIndex.value < totalWeeksInMonth.value) {
+    displayedWeekIndex.value += 1
+    return
+  }
+
+  const nextMonth = new Date(displayedMonth.value)
+  nextMonth.setMonth(nextMonth.getMonth() + 1)
+  displayedMonth.value = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1)
+  displayedWeekIndex.value = 1
 }
 
-function resetToToday() {
-  const now = new Date()
-  displayedDate.value = new Date(now.getFullYear(), now.getMonth(), 1)
-}
+function eventsAt(dateKey, hour) {
+  if (!dateKey) {
+    return []
+  }
 
-function eventsAt(dayIndex, hour) {
-  return events.value.filter((event) => event.day === dayIndex && event.start === hour)
+  return processedEvents.value.filter((event) => event.date === dateKey && event.start === hour)
 }
 
 function eventHeight(duration) {
@@ -62,6 +154,29 @@ function eventHeight(duration) {
 
 function eventClass(category) {
   return eventClassMap[category] || 'event-kelas'
+}
+
+function parseHour(timeText) {
+  const [clock, period] = timeText.split(' ')
+  const [hourText] = clock.split(':')
+  let hour = parseInt(hourText, 10)
+
+  if (period === 'PM' && hour !== 12) {
+    hour += 12
+  }
+
+  if (period === 'AM' && hour === 12) {
+    hour = 0
+  }
+
+  return hour
+}
+
+function toDateKey(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 </script>
 
@@ -74,12 +189,12 @@ function eventClass(category) {
         <header class="page-header">
           <div>
             <h1>Schedule</h1>
-            <p>{{ monthLabel }}</p>
+            <p>Minggu ke-{{ displayedWeekIndex }} dari {{ totalWeeksInMonth }} - {{ monthLabel }}</p>
           </div>
 
           <div class="header-actions">
-            <button class="ghost-btn" @click="prevMonth" aria-label="Previous month">&lt;</button>
-            <button class="ghost-btn" @click="resetToToday">Today</button>
+            <button class="ghost-btn" @click="previousMonth" aria-label="Previous month">&lt;</button>
+
             <button class="ghost-btn" @click="nextMonth" aria-label="Next month">&gt;</button>
           </div>
         </header>
@@ -87,8 +202,9 @@ function eventClass(category) {
         <section class="calendar-card">
           <div class="calendar-header-grid">
             <div class="time-header">Time</div>
-            <div v-for="day in days" :key="day" class="day-header">
-              {{ day }}
+            <div v-for="day in weekDays" :key="day.key" class="day-header">
+              <span class="day-name">{{ day.weekdayLabel }}</span>
+              <span class="day-date" :class="{ 'date-muted': !day.inCurrentMonth }">{{ day.dayNumber }}</span>
             </div>
           </div>
 
@@ -97,13 +213,14 @@ function eventClass(category) {
               <div class="time-cell">{{ hour }}:00</div>
 
               <div
-                v-for="(day, dayIndex) in days"
-                :key="`${hour}-${day}`"
+                v-for="day in weekDays"
+                :key="`${hour}-${day.key}`"
                 class="slot-cell"
+                :class="{ 'slot-empty': !day.inCurrentMonth }"
               >
                 <div
-                  v-for="event in eventsAt(dayIndex, hour)"
-                  :key="`${event.title}-${hour}-${dayIndex}`"
+                  v-for="event in eventsAt(day.dateKey, hour)"
+                  :key="`${event.title}-${hour}-${day.dateKey}`"
                   class="event-block"
                   :class="eventClass(event.category)"
                   :style="{ height: eventHeight(event.duration) }"
@@ -193,6 +310,26 @@ function eventClass(category) {
   border-right: 1px solid #eceff3;
 }
 
+.day-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.day-name {
+  font-size: 0.78rem;
+  color: #616a76;
+}
+
+.day-date {
+  font-size: 0.95rem;
+  color: #1b2430;
+}
+
+.date-muted {
+  color: #9ca6b5;
+}
+
 .day-header:last-child {
   border-right: 0;
 }
@@ -222,6 +359,10 @@ function eventClass(category) {
   min-height: 80px;
   border-right: 1px solid #f2f4f8;
   padding: 4px;
+}
+
+.slot-empty {
+  background: #fafbfd;
 }
 
 .slot-cell:last-child {
