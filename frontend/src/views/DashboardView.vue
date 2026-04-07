@@ -1,5 +1,24 @@
 <script setup>
 import AppSidebar from '../components/AppSidebar.vue'
+import StatCard from '../components/StatCard.vue';
+import FocusCard from '../components/FocusCard.vue';
+import InsightCard from '../components/InsightCard.vue';
+
+const stats = [
+  { icon: '📋', label: 'Total Task', value: 12 },
+  { icon: '✅', label: 'Selesai', value: 8 },
+  { icon: '⏳', label: 'Tertunda', value: 4 },
+  { icon: '✨', label: 'Efisiensi AI', value: '85%', highlight: true }
+]
+
+const insights = [
+  'Berdasarkan pola kerjamu, sebaiknya kerjakan <strong>"Review PR"</strong> pada jam 10:00 pagi.',
+  'Ada waktu kosong 2 jam siang ini, mau digunakan untuk <em>coding</em> fitur baru?'
+]
+
+function handleApplyInsight() {
+  console.log('Rekomendasi diterapkan')
+}
 </script>
 
 <template>
@@ -13,56 +32,24 @@ import AppSidebar from '../components/AppSidebar.vue'
       </header>
 
       <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon">📋</div>
-          <div>
-            <h3>Total Task</h3>
-            <p class="stat-number">12</p>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">✅</div>
-          <div>
-            <h3>Selesai</h3>
-            <p class="stat-number">8</p>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">⏳</div>
-          <div>
-            <h3>Tertunda</h3>
-            <p class="stat-number">4</p>
-          </div>
-        </div>
-        <div class="stat-card highlight">
-          <div class="stat-icon">✨</div>
-          <div>
-            <h3>Efisiensi AI</h3>
-            <p class="stat-number">85%</p>
-          </div>
-        </div>
+        <StatCard
+          v-for="stat in stats"
+          :key="stat.label"
+          v-bind="stat"
+        />
       </div>
 
       <div class="content-grid">
-        <section class="card focus-section">
-          <h3>🎯 Fokus Utama Hari Ini</h3>
-          <div class="focus-item">
-            <div class="task-info">
-              <strong>Selesaikan Frontend AI Scheduler</strong>
-              <p>Deadline: 23:59 PM</p>
-            </div>
-            <span class="status-badge">Sedang Dikerjakan</span>
-          </div>
-        </section>
+        <FocusCard 
+          title="Selesaikan Frontend AI Scheduler"
+          deadline="23:59 PM"
+          status="Sedang Dikerjakan"
+        />
 
-        <section class="card insight-section">
-          <h3>💡 Rekomendasi AI</h3>
-          <ul class="insight-list">
-            <li>Berdasarkan pola kerjamu, sebaiknya kerjakan <strong>"Review PR"</strong> pada jam 10:00 pagi.</li>
-            <li>Ada waktu kosong 2 jam siang ini, mau digunakan untuk *coding* fitur baru?</li>
-          </ul>
-          <button class="btn-outline-ai">Terapkan Rekomendasi</button>
-        </section>
+        <InsightCard
+          :insights="insights"
+          @apply="handleApplyInsight"
+        />
       </div>
     </main>
   </div>
