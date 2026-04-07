@@ -1,8 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import { mockScheduleData } from '../data/mockSchedule'
+import { mockTasks } from '../data/mockTasks'
 
+const router = useRouter()
 const taskName = ref('')
 const taskDate = ref('')
 const taskTime = ref('')
@@ -38,6 +41,8 @@ const scheduleHeading = computed(() => {
 const selectedSchedule = computed(() => {
   return mockScheduleData.filter((item) => item.date === selectedDateKey.value)
 })
+
+const recentTasks = computed(() => mockTasks.slice(0, 4))
 
 const calendarCells = computed(() => {
   const year = displayMonth.value.getFullYear()
@@ -101,6 +106,14 @@ function toDateKey(date) {
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
+
+function openTaskDetail(taskId) {
+  if (!taskId) {
+    return
+  }
+
+  router.push(`/task/${taskId}`)
+}
 </script>
 
 <template>
@@ -138,19 +151,12 @@ function toDateKey(date) {
 
           <section class="card list-section">
             <h3>Task Terbaru</h3>
-            <div class="task-item">
+            <div v-for="task in recentTasks" :key="task.id" class="task-item">
               <div class="task-info">
-                <strong>Kelas Pak Cahyo</strong>
-                <p>10:00 - 11:00 AM</p>
+                <strong>{{ task.title }}</strong>
+                <p>{{ task.time }} - {{ task.duration }}</p>
               </div>
-              <button class="btn-outline">Detail</button>
-            </div>
-            <div class="task-item">
-              <div class="task-info">
-                <strong>Beli Batagor</strong>
-                <p>13:00 - 15:00 PM</p>
-              </div>
-              <button class="btn-outline">Detail</button>
+              <button class="btn-outline" @click="openTaskDetail(task.id)">Detail</button>
             </div>
           </section>
         </div>
@@ -196,7 +202,7 @@ function toDateKey(date) {
                 <strong>{{ item.title }}</strong>
                 <p>{{ item.time }}</p>
               </div>
-              <button class="btn-action">Detail</button>
+              <button class="btn-action" :disabled="!item.taskId" @click="openTaskDetail(item.taskId)">Detail</button>
             </div>
           </section>
         </div>
@@ -294,6 +300,10 @@ input {
   padding: 6px 15px;
   border-radius: 6px;
   cursor: pointer;
+}
+.btn-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .empty-schedule {
   border: 1px dashed #d4d9e2;
