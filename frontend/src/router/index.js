@@ -38,6 +38,12 @@ const router = createRouter({
             path: '/task/:taskId',
             name: 'task-detail',
             component: TaskDetailView
+        },
+        {
+            path: '/register',
+            name: 'register',
+            component: () =>
+                import ('../views/RegisterView.vue')
         }
     ]
 })
