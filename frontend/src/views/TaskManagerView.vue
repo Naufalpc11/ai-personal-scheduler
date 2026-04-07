@@ -1,10 +1,119 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
+import { mockScheduleData } from '../data/mockSchedule'
+import { mockTasks } from '../data/mockTasks'
 
+const router = useRouter()
 const taskName = ref('')
 const taskDate = ref('')
 const taskTime = ref('')
+
+const weekDayNames = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+const today = new Date()
+const selectedDate = ref(new Date(today.getFullYear(), today.getMonth(), today.getDate()))
+const displayMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1))
+
+const monthLabel = computed(() => {
+  return displayMonth.value.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+})
+
+const selectedDateKey = computed(() => {
+  return toDateKey(selectedDate.value)
+})
+
+const selectedDateLabel = computed(() => {
+  const formatted = selectedDate.value.toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
+
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+})
+
+const scheduleHeading = computed(() => {
+  return selectedDateLabel.value
+})
+
+const selectedSchedule = computed(() => {
+  return mockScheduleData.filter((item) => item.date === selectedDateKey.value)
+})
+
+const recentTasks = computed(() => mockTasks.slice(0, 4))
+
+const calendarCells = computed(() => {
+  const year = displayMonth.value.getFullYear()
+  const month = displayMonth.value.getMonth()
+  const firstDay = new Date(year, month, 1)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const offset = (firstDay.getDay() + 6) % 7
+  const cells = []
+
+  for (let i = 0; i < offset; i += 1) {
+    cells.push({ key: `empty-${year}-${month}-${i}`, day: null })
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const current = new Date(year, month, day)
+    const isToday =
+      current.getFullYear() === today.getFullYear() &&
+      current.getMonth() === today.getMonth() &&
+      current.getDate() === today.getDate()
+    const isSelected =
+      current.getFullYear() === selectedDate.value.getFullYear() &&
+      current.getMonth() === selectedDate.value.getMonth() &&
+      current.getDate() === selectedDate.value.getDate()
+
+    cells.push({
+      key: `${year}-${month}-${day}`,
+      day,
+      date: current,
+      isToday,
+      isSelected
+    })
+  }
+
+  return cells
+})
+
+function previousMonth() {
+  const prev = new Date(displayMonth.value)
+  prev.setMonth(prev.getMonth() - 1)
+  displayMonth.value = new Date(prev.getFullYear(), prev.getMonth(), 1)
+}
+
+function nextMonth() {
+  const next = new Date(displayMonth.value)
+  next.setMonth(next.getMonth() + 1)
+  displayMonth.value = new Date(next.getFullYear(), next.getMonth(), 1)
+}
+
+function pickDate(cell) {
+  if (!cell.date) {
+    return
+  }
+
+  selectedDate.value = new Date(cell.date)
+  taskDate.value = toDateKey(cell.date)
+}
+
+function toDateKey(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function openTaskDetail(taskId) {
+  if (!taskId) {
+    return
+  }
+
+  router.push(`/task/${taskId}`)
+}
 </script>
 
 <template>
@@ -42,19 +151,12 @@ const taskTime = ref('')
 
           <section class="card list-section">
             <h3>Task Terbaru</h3>
-            <div class="task-item">
+            <div v-for="task in recentTasks" :key="task.id" class="task-item">
               <div class="task-info">
-                <strong>Kelas Pak Cahyo</strong>
-                <p>10:00 - 11:00 AM</p>
+                <strong>{{ task.title }}</strong>
+                <p>{{ task.time }} - {{ task.duration }}</p>
               </div>
-              <button class="btn-outline">Detail</button>
-            </div>
-            <div class="task-item">
-              <div class="task-info">
-                <strong>Beli Batagor</strong>
-                <p>13:00 - 15:00 PM</p>
-              </div>
-              <button class="btn-outline">Detail</button>
+              <button class="btn-outline" @click="openTaskDetail(task.id)">Detail</button>
             </div>
           </section>
         </div>
@@ -62,26 +164,45 @@ const taskTime = ref('')
         <div class="right-column">
           <section class="card calendar-section">
             <div class="calendar-header">
-              <h3>April 2026</h3>
+              <h3>{{ monthLabel }}</h3>
               <div class="cal-nav">
-                <button>&lt;</button>
-                <button>&gt;</button>
+                <button type="button" @click="previousMonth">&lt;</button>
+                <button type="button" @click="nextMonth">&gt;</button>
               </div>
             </div>
             <div class="calendar-grid">
-              <div class="cal-day-name">Mo</div><div class="cal-day-name">Tu</div><div class="cal-day-name">We</div><div class="cal-day-name">Th</div><div class="cal-day-name">Fr</div><div class="cal-day-name">Sa</div><div class="cal-day-name">Su</div>
-              <span v-for="n in 30" :key="n" class="cal-day" :class="{'active-day': n === 14}">{{ n }}</span>
+              <div v-for="weekDay in weekDayNames" :key="weekDay" class="cal-day-name">{{ weekDay }}</div>
+              <button
+                v-for="cell in calendarCells"
+                :key="cell.key"
+                type="button"
+                class="cal-day"
+                :class="{
+                  'is-empty': !cell.day,
+                  'active-day': cell.isSelected,
+                  'today-outline': cell.isToday && !cell.isSelected
+                }"
+                :disabled="!cell.day"
+                @click="pickDate(cell)"
+              >
+                {{ cell.day }}
+              </button>
             </div>
           </section>
 
           <section class="card schedule-section">
-            <h3>Jadwal Hari Ini</h3>
-            <div class="schedule-item">
+            <h3>{{ scheduleHeading }}</h3>
+
+            <div v-if="selectedSchedule.length === 0" class="empty-schedule">
+              Tidak ada jadwal untuk tanggal ini.
+            </div>
+
+            <div v-for="item in selectedSchedule" :key="`${item.date}-${item.title}-${item.time}`" class="schedule-item">
               <div class="task-info">
-                <strong>Review PR Github</strong>
-                <p>09:00 AM</p>
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.time }}</p>
               </div>
-              <button class="btn-action">Mulai</button>
+              <button class="btn-action" :disabled="!item.taskId" @click="openTaskDetail(item.taskId)">Detail</button>
             </div>
           </section>
         </div>
@@ -180,6 +301,18 @@ input {
   border-radius: 6px;
   cursor: pointer;
 }
+.btn-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.empty-schedule {
+  border: 1px dashed #d4d9e2;
+  border-radius: 10px;
+  padding: 12px;
+  color: #6a7280;
+  background: #fafbfd;
+  margin-bottom: 10px;
+}
 
 /* CALENDAR STYLES */
 .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
@@ -195,11 +328,15 @@ input {
   padding: 10px;
   font-size: 0.9rem;
   color: #555;
+  border: 0;
+  background: transparent;
   border-radius: 5px;
 }
 
 .cal-day:hover { background: #8FABD4; color: white; cursor: pointer; }
 .active-day { background-color: #4A70A9; color: white; border-radius: 5px; }
+.is-empty { visibility: hidden; pointer-events: none; }
+.today-outline { outline: 1px solid #4A70A9; }
 
 @media (max-width: 960px) {
   .content-grid {

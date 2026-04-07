@@ -4,6 +4,7 @@ import TaskManagerView from '../views/TaskManagerView.vue'
 import ScheduleView from '../views/ScheduleView.vue'
 import AIInsightsView from '../views/AIInsightsView.vue'
 import LoginView from '../views/LoginView.vue'
+import TaskDetailView from '../views/TaskDetailView.vue'
 
 const router = createRouter({
     history: createWebHistory(
@@ -32,6 +33,11 @@ const router = createRouter({
             path: '/login',
             name: 'login',
             component: LoginView
+        },
+        {
+            path: '/task/:taskId',
+            name: 'task-detail',
+            component: TaskDetailView
         }
     ]
 })
