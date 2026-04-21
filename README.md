@@ -143,6 +143,33 @@ Authorization: Bearer <token>
 ### AI Result
 - `POST /api/ai-result`
 
+### AI Generate
+- `POST /api/ai-generate`
+
+### AI Execute
+- `POST /api/ai-execute`
+
+Endpoint ini mencoba provider sesuai urutan `AI_PROVIDER_ORDER`. Kalau provider pertama gagal karena auth, quota, atau rate limit, backend otomatis pindah ke provider berikutnya.
+
+`/api/ai-generate` hanya mengembalikan output AI yang sudah divalidasi. `/api/ai-execute` menjalankan generate lalu langsung menyimpan hasil ke database.
+
+Contoh ENV yang dipakai:
+
+```env
+AI_PROVIDER_ORDER="openai,gemini,ollama"
+OPENAI_API_KEY="..."
+GEMINI_API_KEY="..."
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_MODEL="gpt-oss:20b"
+```
+
+Tes awal paling aman:
+1. Jalankan backend.
+2. Kirim `POST /api/ai-generate` dengan body JSON berisi `userRequest`.
+3. Lihat provider mana yang dipakai dan apakah output JSON lolos validasi.
+4. Kalau mau full flow, kirim request yang sama ke `POST /api/ai-execute`.
+5. Kalau kamu sudah punya JSON hasil AI dari luar, tetap bisa kirim ke `POST /api/ai-result` untuk simpan manual.
+
 ## Contoh Request & Response
 
 ### 1) Register

@@ -1,0 +1,170 @@
+class AiProviderError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = "AiProviderError";
+    this.provider = options.provider || "unknown";
+    this.statusCode = options.statusCode || 500;
+    this.retryable = Boolean(options.retryable);
+    this.quotaExceeded = Boolean(options.quotaExceeded);
+    this.raw = options.raw;
+  }
+}
+
+const normalizeBaseUrl = (value, suffix) => {
+  const baseUrl = (value || "").trim().replace(/\/$/, "");
+
+  if (!baseUrl) {
+    return "";
+  }
+
+  if (baseUrl.endsWith(suffix)) {
+    return baseUrl;
+  }
+
+  return `${baseUrl}${suffix}`;
+};
+
+const isQuotaLikeMessage = (text) => /quota|billing|limit|rate\s*limit|insufficient|exceeded|token/i.test(text);
+
+const readErrorText = async (response) => {
+  const text = await response.text();
+
+  try {
+    const data = JSON.parse(text);
+    return {
+      data,
+      message: data?.error?.message || data?.message || text,
+    };
+  } catch (_error) {
+    return {
+      data: text,
+      message: text,
+    };
+  }
+};
+
+const throwProviderError = async (provider, response) => {
+  const { data, message } = await readErrorText(response);
+  const quotaExceeded = response.status === 402 || response.status === 429 || isQuotaLikeMessage(message);
+  const retryable = quotaExceeded || response.status >= 500;
+
+  throw new AiProviderError(`Provider ${provider} failed with status ${response.status}`, {
+    provider,
+    statusCode: response.status,
+    retryable,
+    quotaExceeded,
+    raw: data,
+  });
+};
+
+const callOpenAiCompatibleProvider = async ({ provider, baseUrl, apiKey, model, messages, temperature }) => {
+  const resolvedBaseUrl = normalizeBaseUrl(baseUrl, "/v1");
+  if (!resolvedBaseUrl) {
+    throw new AiProviderError(`Provider ${provider} is not configured`, {
+      provider,
+      statusCode: 500,
+      retryable: false,
+    });
+  }
+
+  const response = await fetch(`${resolvedBaseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!response.ok) {
+    await throwProviderError(provider, response);
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content;
+
+  return {
+    provider,
+    model: data?.model || model,
+    content,
+    raw: data,
+  };
+};
+
+const callGeminiProvider = async ({ provider, baseUrl, apiKey, model, systemPrompt, userPrompt, temperature }) => {
+  if (!baseUrl || !apiKey) {
+    throw new AiProviderError(`Provider ${provider} is not configured`, {
+      provider,
+      statusCode: 500,
+      retryable: false,
+    });
+  }
+
+  const resolvedBaseUrl = baseUrl.replace(/\/$/, "");
+  const response = await fetch(`${resolvedBaseUrl}/models/${model}:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: systemPrompt }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: userPrompt }],
+        },
+      ],
+      generationConfig: {
+        temperature,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    await throwProviderError(provider, response);
+  }
+
+  const data = await response.json();
+  const content = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || "").join("");
+
+  return {
+    provider,
+    model: data?.modelVersion || model,
+    content,
+    raw: data,
+  };
+};
+
+const createProviderRunner = (providerName, config) => {
+  if (providerName === "openai") {
+    return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
+  }
+
+  if (providerName === "ollama") {
+    return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
+  }
+
+  if (providerName === "gemini") {
+    return async (input) => callGeminiProvider({ provider: providerName, ...config, ...input });
+  }
+
+  throw new AiProviderError(`Unknown provider: ${providerName}`, {
+    provider: providerName,
+    statusCode: 500,
+    retryable: false,
+  });
+};
+
+module.exports = {
+  AiProviderError,
+  createProviderRunner,
+  normalizeBaseUrl,
+};

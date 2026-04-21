@@ -146,6 +146,46 @@ const aiResultSchema = z.object({
   query: z.object({}),
 });
 
+const aiProviderSchema = z.enum(["auto", "openai", "gemini", "ollama"]);
+
+const aiGenerateSchema = z.object({
+  body: z.object({
+    userRequest: z.string().min(1),
+    intent: z.enum(["create_task", "add_subtasks", "auto_schedule", "reschedule", "recommend"]).optional(),
+    provider: aiProviderSchema.optional().default("auto"),
+    locale: z.string().min(2).optional().default("id-ID"),
+    timezone: z.string().min(1).optional().default("Asia/Jakarta"),
+    temperature: z.number().min(0).max(1).optional(),
+    maxAttempts: z.coerce.number().int().min(1).max(5).optional(),
+    context: z
+      .object({
+        currentDate: z.string().datetime().optional(),
+        notes: z.string().optional(),
+        existingTasks: z
+          .array(
+            z.object({
+              title: z.string().min(1),
+              status: z.enum(["pending", "in_progress", "done"]).optional(),
+            })
+          )
+          .optional(),
+        fixedEvents: z
+          .array(
+            z.object({
+              title: z.string().min(1),
+              startTime: z.string().datetime(),
+              endTime: z.string().datetime(),
+            })
+          )
+          .optional(),
+      })
+      .strict()
+      .optional(),
+  }),
+  params: z.object({}),
+  query: z.object({}),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -158,4 +198,6 @@ module.exports = {
   createScheduleSchema,
   updateScheduleSchema,
   aiResultSchema,
+  aiGenerateSchema,
+  aiProviderSchema,
 };
