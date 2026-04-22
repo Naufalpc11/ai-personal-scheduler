@@ -146,7 +146,7 @@ const aiResultSchema = z.object({
   query: z.object({}),
 });
 
-const aiProviderSchema = z.enum(["auto", "openai", "gemini", "ollama"]);
+const aiProviderSchema = z.enum(["auto", "openai", "gemini"]);
 
 const aiGenerateSchema = z.object({
   body: z.object({

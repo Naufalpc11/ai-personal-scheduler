@@ -148,10 +148,6 @@ const createProviderRunner = (providerName, config) => {
     return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
   }
 
-  if (providerName === "ollama") {
-    return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
-  }
-
   if (providerName === "gemini") {
     return async (input) => callGeminiProvider({ provider: providerName, ...config, ...input });
   }

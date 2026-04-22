@@ -156,11 +156,9 @@ Endpoint ini mencoba provider sesuai urutan `AI_PROVIDER_ORDER`. Kalau provider 
 Contoh ENV yang dipakai:
 
 ```env
-AI_PROVIDER_ORDER="openai,gemini,ollama"
+AI_PROVIDER_ORDER="openai,gemini"
 OPENAI_API_KEY="..."
 GEMINI_API_KEY="..."
-OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_MODEL="gpt-oss:20b"
 ```
 
 Tes awal paling aman:

@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const AppError = require("../utils/appError");
 const { parseLlmJson, validateLlmOutput } = require("./llm-contract");
-const { AiProviderError, createProviderRunner, normalizeBaseUrl } = require("./providers");
+const { AiProviderError, createProviderRunner } = require("./providers");
 
 const contractPromptPath = path.join(__dirname, "prompts", "ollama-system-contract.txt");
 const contractPrompt = fs.readFileSync(contractPromptPath, "utf8");
@@ -18,15 +18,10 @@ const providerConfigs = {
     apiKey: process.env.GEMINI_API_KEY,
     model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
   },
-  ollama: {
-    baseUrl: normalizeBaseUrl(process.env.OLLAMA_BASE_URL || "http://localhost:11434", "/v1"),
-    apiKey: process.env.OLLAMA_API_KEY,
-    model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
-  },
 };
 
 const defaultProviderOrder = (preferredProvider) => {
-  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "openai,gemini,ollama")
+  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "openai,gemini")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -76,7 +71,7 @@ const resolveProviderOrder = ({ provider, intent, userRequest }) => {
       : (() => {
           const requestLength = userRequest.length;
           const qualityFirst = intent === "reschedule" || requestLength > 180;
-          return qualityFirst ? ["openai", "gemini", "ollama"] : ["ollama", "openai", "gemini"];
+          return qualityFirst ? ["openai", "gemini"] : ["gemini", "openai"];
         })();
 
   const uniqueProviders = [];
