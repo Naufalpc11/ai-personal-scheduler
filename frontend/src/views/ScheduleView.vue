@@ -1,444 +1,171 @@
 <script setup>
 import { computed, ref } from 'vue'
-import AppSidebar from '../components/AppSidebar.vue'
-import { mockScheduleData } from '../data/mockSchedule'
+import { ChevronLeft, ChevronRight, Clock3 } from 'lucide-vue-next'
+import MainLayout from '@/components/layout/MainLayout.vue'
+import AppBadge from '@/components/ui/AppBadge.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import { useAppStore } from '@/composables/useAppStore'
+import { useRequireAuth } from '@/composables/useRequireAuth'
+import { MONTH_NAMES, dateToStr, timeToMinutes } from '@/utils/task-helpers'
 
-const hours = Array.from({ length: 13 }, (_, i) => i + 8)
+useRequireAuth()
 
-const today = new Date()
-const displayedMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1))
-const displayedWeekIndex = ref(1)
+const { tasks } = useAppStore()
 
-const firstWeekOffset = computed(() => {
-  return (new Date(displayedMonth.value.getFullYear(), displayedMonth.value.getMonth(), 1).getDay() + 6) % 7
-})
+const TODAY = '2026-04-21'
+const cursor = ref(new Date('2026-04-21T00:00:00'))
+const selectedDate = ref(TODAY)
+const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 
-const monthLabel = computed(() =>
-  displayedMonth.value.toLocaleDateString('id-ID', {
-    month: 'long',
-    year: 'numeric'
-  })
-)
+const monthLabel = computed(() => `${MONTH_NAMES[cursor.value.getMonth()]} ${cursor.value.getFullYear()}`)
 
-const daysInDisplayedMonth = computed(() => {
-  const year = displayedMonth.value.getFullYear()
-  const month = displayedMonth.value.getMonth()
-  return new Date(year, month + 1, 0).getDate()
-})
+const cells = computed(() => {
+  const year = cursor.value.getFullYear()
+  const month = cursor.value.getMonth()
+  const firstDay = new Date(year, month, 1).getDay()
+  const totalDays = new Date(year, month + 1, 0).getDate()
+  const offset = firstDay
+  const items = []
 
-const totalWeeksInMonth = computed(() => {
-  return Math.ceil((firstWeekOffset.value + daysInDisplayedMonth.value) / 7)
-})
-
-function getWeekIndexForDate(date) {
-  const offset = (new Date(date.getFullYear(), date.getMonth(), 1).getDay() + 6) % 7
-  return Math.floor((offset + date.getDate() - 1) / 7) + 1
-}
-
-if (
-  today.getFullYear() === displayedMonth.value.getFullYear() &&
-  today.getMonth() === displayedMonth.value.getMonth()
-) {
-  displayedWeekIndex.value = getWeekIndexForDate(today)
-}
-
-const weekInfo = computed(() => {
-  const year = displayedMonth.value.getFullYear()
-  const month = displayedMonth.value.getMonth()
-  const gridStartDate = new Date(year, month, 1 - firstWeekOffset.value)
-  const weekStartDate = new Date(gridStartDate)
-  weekStartDate.setDate(gridStartDate.getDate() + (displayedWeekIndex.value - 1) * 7)
-
-  const weekEndDate = new Date(weekStartDate)
-  weekEndDate.setDate(weekStartDate.getDate() + 6)
-
-  return {
-    weekStartDate,
-    weekEndDate
+  for (let i = 0; i < offset; i += 1) {
+    items.push({ key: `empty-${i}`, empty: true })
   }
-})
 
-const weekDays = computed(() => {
-  const result = []
-  const month = displayedMonth.value.getMonth()
-  const weekStart = weekInfo.value.weekStartDate
+  for (let day = 1; day <= totalDays; day += 1) {
+    const date = new Date(year, month, day)
+    const key = dateToStr(date)
+    const count = tasks.value.filter((task) => task.date === key).length
 
-  for (let i = 0; i < 7; i += 1) {
-    const date = new Date(weekStart)
-    date.setDate(weekStart.getDate() + i)
-    const inCurrentMonth = date.getMonth() === month
-
-    result.push({
-      key: `${toDateKey(date)}-${i}`,
-      dateKey: toDateKey(date),
-      dayNumber: date.getDate(),
-      weekdayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
-      inCurrentMonth
+    items.push({
+      key,
+      empty: false,
+      day,
+      keyDate: key,
+      count,
+      isToday: key === TODAY,
+      isSelected: key === selectedDate.value
     })
   }
 
-  return result
+  return items
 })
 
-const eventClassMap = {
-  kelas: 'event-kelas',
-  review: 'event-review',
-  meeting: 'event-meeting',
-  personal: 'event-personal'
-}
-
-const legendItems = [
-  { key: 'kelas', label: 'Kelas' },
-  { key: 'review', label: 'Review' },
-  { key: 'meeting', label: 'Meeting' },
-  { key: 'personal', label: 'Personal' }
-]
-
-// Transform mock data: date string + time -> day index + hour + duration
-const processedEvents = computed(() => {
-  const result = []
-  const weekStartKey = toDateKey(weekInfo.value.weekStartDate)
-  const weekEndKey = toDateKey(weekInfo.value.weekEndDate)
-
-  mockScheduleData.forEach((item) => {
-    if (item.date >= weekStartKey && item.date <= weekEndKey) {
-      const hour = parseHour(item.time)
-      result.push({
-        date: item.date,
-        start: hour,
-        duration: 1,
-        title: item.title,
-        category: item.category || 'kelas'
-      })
-    }
-  })
-
-  return result
+const selectedTasks = computed(() => {
+  return tasks.value
+    .filter((task) => task.date === selectedDate.value)
+    .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
 })
 
-function previousMonth() {
-  if (displayedWeekIndex.value > 1) {
-    displayedWeekIndex.value -= 1
-    return
-  }
-
-  const prevMonth = new Date(displayedMonth.value)
-  prevMonth.setMonth(prevMonth.getMonth() - 1)
-  displayedMonth.value = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 1)
-  displayedWeekIndex.value = totalWeeksInMonth.value
+function prevMonth() {
+  const next = new Date(cursor.value)
+  next.setMonth(next.getMonth() - 1)
+  cursor.value = next
 }
 
 function nextMonth() {
-  if (displayedWeekIndex.value < totalWeeksInMonth.value) {
-    displayedWeekIndex.value += 1
-    return
-  }
-
-  const nextMonth = new Date(displayedMonth.value)
-  nextMonth.setMonth(nextMonth.getMonth() + 1)
-  displayedMonth.value = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1)
-  displayedWeekIndex.value = 1
+  const next = new Date(cursor.value)
+  next.setMonth(next.getMonth() + 1)
+  cursor.value = next
 }
 
-function eventsAt(dateKey, hour) {
-  if (!dateKey) {
-    return []
-  }
-
-  return processedEvents.value.filter((event) => event.date === dateKey && event.start === hour)
-}
-
-function eventHeight(duration) {
-  return `${duration * 80 - 8}px`
-}
-
-function eventClass(category) {
-  return eventClassMap[category] || 'event-kelas'
-}
-
-function parseHour(timeText) {
-  const [clock, period] = timeText.split(' ')
-  const [hourText] = clock.split(':')
-  let hour = parseInt(hourText, 10)
-
-  if (period === 'PM' && hour !== 12) {
-    hour += 12
-  }
-
-  if (period === 'AM' && hour === 12) {
-    hour = 0
-  }
-
-  return hour
-}
-
-function toDateKey(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function formatDate(dateString) {
+  return new Date(`${dateString}T00:00:00`).toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
 }
 </script>
 
 <template>
-  <div class="app-shell">
-    <AppSidebar />
+  <MainLayout>
+    <div class="space-y-5">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Jadwal</h1>
+          <p class="mt-1 text-sm text-slate-400">Kalender kegiatan</p>
+        </div>
 
-    <main class="main-content">
-      <section class="schedule-page">
-        <header class="page-header">
-          <div>
-            <h1>Schedule</h1>
-            <p>Minggu ke-{{ displayedWeekIndex }} dari {{ totalWeeksInMonth }} - {{ monthLabel }}</p>
+        <button class="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-600" type="button" @click="selectedDate = TODAY">
+          Hari Ini
+        </button>
+      </div>
+
+      <AppCard class-name="p-4">
+        <div class="mb-4 flex items-center justify-between">
+          <button class="rounded-xl p-2 text-slate-500 transition hover:bg-slate-50" type="button" @click="prevMonth">
+            <ChevronLeft class="h-5 w-5" />
+          </button>
+
+          <h2 class="text-lg font-semibold text-slate-900">{{ monthLabel }}</h2>
+
+          <button class="rounded-xl p-2 text-slate-500 transition hover:bg-slate-50" type="button" @click="nextMonth">
+            <ChevronRight class="h-5 w-5" />
+          </button>
+        </div>
+
+        <div class="mb-4 grid grid-cols-7 text-center text-xs font-medium text-slate-400">
+          <span v-for="day in DAY_NAMES" :key="day">{{ day }}</span>
+        </div>
+
+        <div class="grid grid-cols-7 gap-y-2">
+          <div v-for="cell in cells" :key="cell.key">
+            <button
+              v-if="!cell.empty"
+              class="mx-auto flex aspect-square w-[72%] flex-col items-center justify-center rounded-2xl text-sm font-medium transition-all"
+              :class="cell.isSelected ? 'bg-emerald-500 text-white shadow-sm' : cell.isToday ? 'bg-emerald-50 text-emerald-600' : 'text-slate-700 hover:bg-slate-50'"
+              type="button"
+              @click="selectedDate = cell.keyDate"
+            >
+              <span>{{ cell.day }}</span>
+              <span v-if="cell.count" class="mt-1 h-1 w-1 rounded-full" :class="cell.isSelected ? 'bg-white' : 'bg-slate-400'" />
+            </button>
           </div>
+        </div>
+      </AppCard>
 
-          <div class="header-actions">
-            <button class="ghost-btn" @click="previousMonth" aria-label="Previous month">&lt;</button>
+      <section>
+        <div class="mb-3 flex items-center justify-between">
+          <p class="text-sm font-semibold text-slate-700">{{ formatDate(selectedDate) }}</p>
+          <span class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">{{ selectedTasks.length }} task</span>
+        </div>
 
-            <button class="ghost-btn" @click="nextMonth" aria-label="Next month">&gt;</button>
-          </div>
-        </header>
-
-        <section class="calendar-card">
-          <div class="calendar-header-grid">
-            <div class="time-header">Time</div>
-            <div v-for="day in weekDays" :key="day.key" class="day-header">
-              <span class="day-name">{{ day.weekdayLabel }}</span>
-              <span class="day-date" :class="{ 'date-muted': !day.inCurrentMonth }">{{ day.dayNumber }}</span>
-            </div>
-          </div>
-
-          <div class="calendar-body">
-            <div v-for="hour in hours" :key="hour" class="hour-row">
-              <div class="time-cell">{{ hour }}:00</div>
-
-              <div
-                v-for="day in weekDays"
-                :key="`${hour}-${day.key}`"
-                class="slot-cell"
-                :class="{ 'slot-empty': !day.inCurrentMonth }"
-              >
-                <div
-                  v-for="event in eventsAt(day.dateKey, hour)"
-                  :key="`${event.title}-${hour}-${day.dateKey}`"
-                  class="event-block"
-                  :class="eventClass(event.category)"
-                  :style="{ height: eventHeight(event.duration) }"
-                >
-                  {{ event.title }}
+        <div v-if="selectedTasks.length" class="space-y-3">
+          <AppCard v-for="task in selectedTasks" :key="task.id" class-name="p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <AppBadge :tone="task.priority">{{ task.category }}</AppBadge>
+                <h3 class="mt-2 text-lg font-semibold text-slate-900">{{ task.title }}</h3>
+                <div class="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
+                  <Clock3 class="h-4 w-4" />
+                  <span>{{ task.startTime }} – {{ task.endTime }} · {{ task.duration ?? '1 jam' }}</span>
                 </div>
+                <p v-if="task.subtasks?.length" class="mt-1 text-xs text-slate-400">
+                  {{ task.subtasks.filter((subtask) => subtask.completed).length }}/{{ task.subtasks.length }} sub-task selesai
+                </p>
+              </div>
+
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl" :class="task.priority === 'high' ? 'bg-amber-100 text-amber-500' : task.priority === 'medium' ? 'bg-blue-100 text-blue-500' : 'bg-emerald-100 text-emerald-500'">
+                <Clock3 class="h-5 w-5" />
               </div>
             </div>
-          </div>
-        </section>
 
-        <section class="legend-row">
-          <div v-for="item in legendItems" :key="item.key" class="legend-item">
-            <span class="legend-dot" :class="eventClass(item.key)"></span>
-            <span>{{ item.label }}</span>
-          </div>
-        </section>
+            <div v-if="task.subtasks?.length" class="mt-3">
+              <div class="h-1.5 rounded-full bg-slate-100">
+                <div
+                  class="h-1.5 rounded-full bg-blue-500"
+                  :style="{ width: `${(task.subtasks.filter((subtask) => subtask.completed).length / task.subtasks.length) * 100}%` }"
+                />
+              </div>
+            </div>
+          </AppCard>
+        </div>
+
+        <div v-else class="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+          Tidak ada task di tanggal ini.
+        </div>
       </section>
-    </main>
-  </div>
+    </div>
+  </MainLayout>
 </template>
-
-<style scoped>
-.schedule-page {
-  display: grid;
-  gap: 24px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h1 {
-  margin: 0 0 8px;
-  font-size: 2rem;
-}
-
-.page-header p {
-  margin: 0;
-  color: var(--color-muted);
-  text-transform: capitalize;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.ghost-btn {
-  padding: 10px 16px;
-  border: 1px solid #d5d8df;
-  border-radius: 12px;
-  background: #fff;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.ghost-btn:hover {
-  background: #f2f5fb;
-}
-
-.calendar-card {
-  background: #fff;
-  border-radius: 18px;
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
-  border: 1px solid #eceff3;
-}
-
-.calendar-header-grid,
-.hour-row {
-  display: grid;
-  grid-template-columns: 110px repeat(7, minmax(120px, 1fr));
-}
-
-.calendar-header-grid {
-  border-bottom: 1px solid #e5e8ee;
-}
-
-.time-header,
-.day-header {
-  padding: 14px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  border-right: 1px solid #eceff3;
-}
-
-.day-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.day-name {
-  font-size: 0.78rem;
-  color: #616a76;
-}
-
-.day-date {
-  font-size: 0.95rem;
-  color: #1b2430;
-}
-
-.date-muted {
-  color: #9ca6b5;
-}
-
-.day-header:last-child {
-  border-right: 0;
-}
-
-.time-header {
-  color: #616a76;
-}
-
-.hour-row {
-  border-bottom: 1px solid #f2f4f8;
-}
-
-.hour-row:last-child {
-  border-bottom: 0;
-}
-
-.time-cell {
-  padding: 14px;
-  background: #fafbfd;
-  color: #616a76;
-  border-right: 1px solid #eceff3;
-  font-size: 0.85rem;
-}
-
-.slot-cell {
-  position: relative;
-  min-height: 80px;
-  border-right: 1px solid #f2f4f8;
-  padding: 4px;
-}
-
-.slot-empty {
-  background: #fafbfd;
-}
-
-.slot-cell:last-child {
-  border-right: 0;
-}
-
-.slot-cell:hover {
-  background: #f8fbff;
-}
-
-.event-block {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  top: 8px;
-  border-radius: 10px;
-  color: #fff;
-  padding: 8px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  box-shadow: 0 8px 16px rgba(13, 21, 34, 0.16);
-  z-index: 2;
-}
-
-.event-kelas {
-  background: #5b8dbe;
-}
-
-.event-review {
-  background: #8d74d6;
-}
-
-.event-meeting {
-  background: #4bb679;
-}
-
-.event-personal {
-  background: #e3a340;
-}
-
-.legend-row {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #5a6472;
-  font-size: 0.9rem;
-}
-
-.legend-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 5px;
-}
-
-@media (max-width: 1200px) {
-  .calendar-card {
-    overflow-x: auto;
-  }
-
-  .calendar-header-grid,
-  .hour-row {
-    min-width: 980px;
-  }
-}
-
-@media (max-width: 720px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 14px;
-  }
-}
-</style>

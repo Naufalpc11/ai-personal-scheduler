@@ -1,69 +1,101 @@
-<template>
-  <div class="min-h-screen bg-[#EBE7E0] flex flex-col items-center justify-center p-6" style="font-family: sans-serif;">
-    
-    <div class="text-center mb-8">
-      <div class="bg-[#6495ED] rounded-[22px] flex items-center justify-center mx-auto mb-5 shadow-lg shadow-blue-200/50 transform hover:scale-105 transition-transform duration-300" style="width: 64px; height: 64px;">
-        <svg xmlns="http://www.w3.org/2000/svg" style="width: 36px; height: 36px;" class="text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-        </svg>
-      </div>
-      <h1 class="text-4xl font-bold text-[#1A2B3C] tracking-tight">AI Scheduler</h1>
-      <p class="text-gray-500 mt-2 text-lg">Kelola jadwalmu dengan kecerdasan buatan</p>
-    </div>
-
-    <div class="bg-white p-10 md:p-12 shadow-sm w-full max-w-[500px]" style="border-radius: 40px;">
-      <h2 class="text-3xl font-bold mb-10 text-[#1A2B3C]">Daftar Akun Baru</h2>
-      
-      <form @submit.prevent="handleRegister" class="space-y-6">
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2 ml-1 text-left">Nama Lengkap</label>
-          <input type="text" placeholder="Nama Anda" class="w-full px-6 py-4 border border-gray-200 focus:ring-4 focus:ring-blue-100/50 focus:border-[#6495ED] outline-none transition-all duration-300 placeholder:text-gray-300 text-gray-700" style="border-radius: 20px;" required>
-        </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2 ml-1 text-left">Email</label>
-          <input type="email" placeholder="nama@email.com" class="w-full px-6 py-4 border border-gray-200 focus:ring-4 focus:ring-blue-100/50 focus:border-[#6495ED] outline-none transition-all duration-300 placeholder:text-gray-300 text-gray-700" style="border-radius: 20px;" required>
-        </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2 ml-1 text-left">Password</label>
-          <input type="password" placeholder="••••••••" class="w-full px-6 py-4 border border-gray-200 focus:ring-4 focus:ring-blue-100/50 focus:border-[#6495ED] outline-none transition-all duration-300 placeholder:text-gray-300 text-gray-700" style="border-radius: 20px;" required>
-        </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2 ml-1 text-left">Konfirmasi Password</label>
-          <input type="password" placeholder="••••••••" class="w-full px-6 py-4 border border-gray-200 focus:ring-4 focus:ring-blue-100/50 focus:border-[#6495ED] outline-none transition-all duration-300 placeholder:text-gray-300 text-gray-700" style="border-radius: 20px;" required>
-        </div>
-
-        <div class="flex items-center text-sm pt-1">
-          <label class="flex items-center text-gray-500 cursor-pointer hover:text-gray-700 transition-colors">
-            <input type="checkbox" class="mr-3 w-5 h-5 rounded-lg border-gray-300 text-[#6495ED] focus:ring-[#6495ED]" required>
-            Saya setuju dengan <a href="#" class="text-[#6495ED] font-extrabold hover:underline ml-1">syarat dan ketentuan</a>
-          </label>
-        </div>
-
-        <button type="submit" class="w-full bg-[#6495ED] text-white py-4.5 rounded-[20px] font-bold text-lg hover:bg-blue-600 active:scale-[0.98] transition-all shadow-lg shadow-blue-200 mt-4 leading-none h-[64px]" style="border-radius: 20px;">
-          Daftar
-        </button>
-      </form>
-
-      <div class="text-center mt-10">
-        <p class="text-gray-500 font-medium">
-          Sudah punya akun? 
-          <router-link to="/login" class="text-[#6495ED] font-extrabold hover:underline ml-1">Masuk sekarang</router-link>
-        </p>
-      </div>
-    </div>
-    
-    <footer class="mt-16 text-gray-400 text-sm tracking-wide">
-      © 2026 AI Scheduler. All rights reserved.
-    </footer>
-  </div>
-</template>
-
 <script setup>
-const handleRegister = () => {
-  console.log('Mendaftarkan akun baru...');
-  alert('Simulasi: Pendaftaran dikirim! Selanjutnya hubungkan ke API Backend.');
-};
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Eye, EyeOff, Lock, Mail, Sparkles, User } from 'lucide-vue-next'
+import AuthLayout from '@/components/layout/AuthLayout.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import { useAppStore } from '@/composables/useAppStore'
+
+const router = useRouter()
+const { login } = useAppStore()
+
+const name = ref('')
+const email = ref('')
+const password = ref('')
+const confirmPassword = ref('')
+const showPassword = ref(false)
+const error = ref('')
+
+function handleRegister() {
+  error.value = ''
+
+  if (password.value !== confirmPassword.value) {
+    error.value = 'Password dan konfirmasi password tidak cocok.'
+    return
+  }
+
+  if (password.value.length < 6) {
+    error.value = 'Password minimal 6 karakter.'
+    return
+  }
+
+  login(name.value, email.value)
+  router.push('/')
+}
 </script>
+
+<template>
+  <AuthLayout title="Daftar Akun Baru" subtitle="Buat akun dan mulai kelola jadwalmu">
+    <template #logo>
+      <Sparkles class="h-8 w-8 text-white" />
+    </template>
+
+    <p class="mb-5 text-sm text-gray-400">Gratis selamanya!</p>
+
+    <div v-if="error" class="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-500">
+      {{ error }}
+    </div>
+
+    <form class="space-y-4" @submit.prevent="handleRegister">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700">Nama Lengkap</label>
+        <div class="relative">
+          <User class="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input v-model="name" class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-4 text-sm focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Nama kamu" type="text">
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700">Email</label>
+        <div class="relative">
+          <Mail class="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input v-model="email" class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-4 text-sm focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="nama@email.com" type="email">
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700">Password</label>
+        <div class="relative">
+          <Lock class="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input v-model="password" :type="showPassword ? 'text' : 'password'" class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-11 text-sm focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Min. 6 karakter">
+          <button class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" type="button" @click="showPassword = !showPassword">
+            <EyeOff v-if="showPassword" class="h-4 w-4" />
+            <Eye v-else class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700">Konfirmasi Password</label>
+        <div class="relative">
+          <Lock class="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input v-model="confirmPassword" :type="showPassword ? 'text' : 'password'" class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-4 text-sm focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Ulangi password">
+        </div>
+      </div>
+
+      <label class="flex cursor-pointer items-start gap-2.5">
+        <input class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-400" required type="checkbox">
+        <span class="text-sm text-gray-600">Saya setuju dengan <span class="text-blue-500">syarat dan ketentuan</span></span>
+      </label>
+
+      <AppButton class-name="w-full py-3" type="submit">Daftar Sekarang</AppButton>
+    </form>
+
+    <div class="mt-5 text-center">
+      <p class="text-sm text-gray-500">
+        Sudah punya akun?
+        <router-link class="font-semibold text-blue-500 hover:underline" to="/login">Masuk sekarang</router-link>
+      </p>
+    </div>
+  </AuthLayout>
+</template>

@@ -1,445 +1,255 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AppSidebar from '../components/AppSidebar.vue'
-import { getTaskById } from '../data/mockTasks'
+import { ArrowLeft, CheckCircle2, Circle, Edit2, Trash2 } from 'lucide-vue-next'
 
-const route = useRoute()
+import MainLayout from '@/components/layout/MainLayout.vue'
+import AppBadge from '@/components/ui/AppBadge.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+
+import { useAppStore } from '@/composables/useAppStore'
+import { useRequireAuth } from '@/composables/useRequireAuth'
+
+useRequireAuth()
+
 const router = useRouter()
+const route = useRoute()
 
-const taskId = computed(() => route.params.taskId)
-const sourceTask = getTaskById(taskId.value)
+const {
+  tasks,
+  updateTask,
+  addSubtask,
+  deleteTask,
+  deleteSubtask,
+  toggleSubtask,
+  updateSubtask
+} = useAppStore()
 
-const isDeleted = ref(false)
-const isEditing = ref(false)
-const newSubTask = ref('')
+const newSubtask = ref('')
+const isEditingTask = ref(false)
 
-const taskState = ref(
-  sourceTask
-    ? {
-        ...sourceTask,
-        subtasks: sourceTask.subtasks.map((item) => ({ ...item }))
-      }
-    : null
+const editTitle = ref('')
+const editDescription = ref('')
+const editStartTime = ref('')
+const editEndTime = ref('')
+
+const task = computed(() =>
+  tasks.value.find(t => String(t.id) === String(route.params.taskId))
 )
 
-const canSave = computed(() => {
-  return taskState.value && taskState.value.title.trim() && taskState.value.date && taskState.value.time
+// ================= PROGRESS =================
+const completionPercent = computed(() => {
+  if (!task.value) return 0
+  const total = task.value.subtasks?.length || 0
+  if (!total) return 0
+  const done = task.value.subtasks.filter(s => s.completed).length
+  return Math.round((done / total) * 100)
 })
 
-const progress = computed(() => {
-  if (!taskState.value || taskState.value.subtasks.length === 0) {
-    return 0
-  }
-
-  const doneCount = taskState.value.subtasks.filter((item) => item.done).length
-  return Math.round((doneCount / taskState.value.subtasks.length) * 100)
-})
-
-const totalSubTask = computed(() => taskState.value?.subtasks.length ?? 0)
-const completedSubTask = computed(() => taskState.value?.subtasks.filter((item) => item.done).length ?? 0)
-const remainingSubTask = computed(() => totalSubTask.value - completedSubTask.value)
-const canAddSubTask = computed(() => newSubTask.value.trim().length > 0)
-
-function toggleEdit() {
-  isEditing.value = !isEditing.value
+// ================= ACTION =================
+function handleAddSubtask() {
+  const title = newSubtask.value.trim()
+  if (!title || !task.value) return
+  addSubtask(task.value.id, title)
+  newSubtask.value = ''
 }
 
-function saveTask() {
-  if (!canSave.value) {
-    return
-  }
-
-  isEditing.value = false
+function handleDeleteTask() {
+  if (!task.value) return
+  deleteTask(task.value.id)
+  router.push('/task-manager')
 }
 
-function deleteTask() {
-  isDeleted.value = true
+function startEditTask() {
+  if (!task.value) return
+  editTitle.value = task.value.title
+  editDescription.value = task.value.description || ''
+  editStartTime.value = task.value.startTime
+  editEndTime.value = task.value.endTime
+  isEditingTask.value = true
 }
 
-function addSubTask() {
-  if (!taskState.value || !newSubTask.value.trim()) {
-    return
-  }
+function saveTaskEdit() {
+  if (!task.value) return
 
-  taskState.value.subtasks.push({
-    id: `sub-${Date.now()}`,
-    title: newSubTask.value.trim(),
-    done: false
+  updateTask(task.value.id, {
+    title: editTitle.value,
+    description: editDescription.value,
+    startTime: editStartTime.value,
+    endTime: editEndTime.value,
+    duration: buildDuration(editStartTime.value, editEndTime.value)
   })
-  newSubTask.value = ''
+
+  isEditingTask.value = false
 }
 
-function deleteSubTask(subTaskId) {
-  if (!taskState.value) {
-    return
-  }
+// ================= HELPER =================
+function buildDuration(start, end) {
+  if (!start || !end) return '-'
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
 
-  taskState.value.subtasks = taskState.value.subtasks.filter((item) => item.id !== subTaskId)
+  const total = (eh * 60 + em) - (sh * 60 + sm)
+  if (total <= 0) return '0 menit'
+
+  const h = Math.floor(total / 60)
+  const m = total % 60
+
+  if (h && m) return `${h} jam ${m} menit`
+  if (h) return `${h} jam`
+  return `${m} menit`
 }
 
-function toggleSubTask(subTaskId) {
-  if (!taskState.value) {
-    return
-  }
-
-  const target = taskState.value.subtasks.find((item) => item.id === subTaskId)
-  if (target) {
-    target.done = !target.done
-  }
+function formatDate(date) {
+  if (!date) return '-'
+  return new Date(date).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
 }
 </script>
 
 <template>
-  <div class="app-shell">
-    <AppSidebar />
+  <MainLayout>
+    <div v-if="task" class="space-y-6">
 
-    <main class="main-content">
-      <section v-if="!taskState" class="card state-card">
-        <h2>Task tidak ditemukan</h2>
-        <button class="btn-back" @click="router.push('/task-manager')">Kembali ke Task Manager</button>
-      </section>
+      <!-- BREADCRUMB -->
+      <div class="text-sm text-slate-400 flex gap-2">
+        <span>AI Scheduler</span>
+        <span>›</span>
+        <span>Task Manager</span>
+        <span>›</span>
+        <span class="text-slate-700 font-medium">Detail Task</span>
+      </div>
 
-      <section v-else-if="isDeleted" class="card state-card">
-        <h2>Task berhasil dihapus (dummy state)</h2>
-        <button class="btn-back" @click="router.push('/task-manager')">Kembali ke Task Manager</button>
-      </section>
+      <!-- HEADER -->
+      <div class="flex items-center gap-3">
+        <button @click="router.back()" class="p-2 border rounded-lg hover:bg-slate-50">
+          <ArrowLeft class="w-4 h-4" />
+        </button>
 
-      <section v-else class="detail-page">
-        <header class="header-row">
-          <h1>Detail Task</h1>
-          <button class="btn-back" @click="router.push('/task-manager')">Kembali</button>
-        </header>
+        <h1 class="text-2xl font-bold">{{ task.title }}</h1>
+      </div>
 
-        <section class="card">
-          <div class="title-row">
-            <h2>{{ taskState.title }}</h2>
-            <div class="action-row">
-              <button class="btn-outline" @click="toggleEdit">{{ isEditing ? 'Batal' : 'Edit Task' }}</button>
-              <button class="btn-danger" @click="deleteTask">Delete Task</button>
-            </div>
+      <!-- DETAIL CARD -->
+      <AppCard class="p-6">
+        <div class="flex justify-between">
+          <div>
+            <AppBadge>{{ task.category }}</AppBadge>
+            <h2 class="text-lg font-semibold mt-2">{{ task.title }}</h2>
           </div>
 
-          <div class="meta-grid">
-            <label>
-              Tanggal
-              <input v-model="taskState.date" type="date" :disabled="!isEditing" />
-            </label>
-            <label>
-              Waktu
-              <input v-model="taskState.time" type="text" :disabled="!isEditing" />
-            </label>
-            <label>
-              Durasi
-              <input v-model="taskState.duration" type="text" :disabled="!isEditing" />
-            </label>
+          <div class="flex gap-2">
+            <button @click="startEditTask" class="p-2 hover:bg-slate-100 rounded-lg">
+              <Edit2 class="w-4 h-4" />
+            </button>
+
+            <button @click="handleDeleteTask" class="p-2 hover:bg-red-50 rounded-lg text-red-500">
+              <Trash2 class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <!-- INFO -->
+        <div class="grid sm:grid-cols-3 gap-4 mt-5">
+          <div class="bg-slate-50 p-4 rounded-xl">
+            <p class="text-xs text-slate-400">Tanggal</p>
+            <p class="mt-1 font-medium">{{ formatDate(task.date) }}</p>
           </div>
 
-          <label class="field-block">
-            Judul
-            <input v-model="taskState.title" type="text" :disabled="!isEditing" />
-          </label>
-
-          <label class="field-block">
-            Catatan
-            <textarea v-model="taskState.notes" rows="4" :disabled="!isEditing"></textarea>
-          </label>
-
-          <button v-if="isEditing" class="btn-primary" :disabled="!canSave" @click="saveTask">Simpan Perubahan</button>
-        </section>
-
-        <section class="card">
-          <div class="title-row">
-            <h2>Sub-Task List</h2>
-            <p class="progress">Progress: {{ progress }}%</p>
+          <div class="bg-slate-50 p-4 rounded-xl">
+            <p class="text-xs text-slate-400">Waktu</p>
+            <p class="mt-1 font-medium">
+              {{ task.startTime || '-' }} - {{ task.endTime || '-' }}
+            </p>
           </div>
 
-          <div class="subtask-stats">
-            <span class="stat-pill">Total: {{ totalSubTask }}</span>
-            <span class="stat-pill done-pill">Selesai: {{ completedSubTask }}</span>
-            <span class="stat-pill remain-pill">Tersisa: {{ remainingSubTask }}</span>
+          <div class="bg-slate-50 p-4 rounded-xl">
+            <p class="text-xs text-slate-400">Durasi</p>
+            <p class="mt-1 font-medium">{{ task.duration || '-' }}</p>
           </div>
+        </div>
 
-          <div class="progress-track">
-            <div class="progress-fill" :style="{ width: `${progress}%` }"></div>
-          </div>
+        <!-- CATATAN -->
+        <div class="bg-slate-50 p-4 rounded-xl mt-4">
+          <p class="text-xs text-slate-400">Catatan</p>
+          <p class="mt-1">{{ task.description || '-' }}</p>
+        </div>
+      </AppCard>
 
-          <div v-if="totalSubTask === 0" class="empty-subtask">
-            Belum ada sub-task. Tambahkan langkah kerja pertamamu di bawah.
-          </div>
+      <!-- SUBTASK -->
+      <AppCard class="p-6">
+        <div class="flex justify-between mb-2">
+          <h2 class="font-semibold">Sub-Task</h2>
+          <span class="text-blue-500 font-semibold">
+            {{ completionPercent }}%
+          </span>
+        </div>
 
-          <div v-else class="subtask-list">
-            <div v-for="subTask in taskState.subtasks" :key="subTask.id" class="subtask-item">
-              <div class="subtask-main">
-                <input
-                  class="subtask-checkbox"
-                  type="checkbox"
-                  :checked="subTask.done"
-                  @change="toggleSubTask(subTask.id)"
-                />
-                <span class="subtask-content">
-                  <span class="subtask-title" :class="{ done: subTask.done }">{{ subTask.title }}</span>
-                </span>
-              </div>
-              <button class="btn-danger-ghost" @click="deleteSubTask(subTask.id)">Delete Sub-Task</button>
-            </div>
-          </div>
+        <div class="text-sm text-slate-500 mb-3">
+          Total {{ task.subtasks?.length || 0 }}
+        </div>
 
-          <div class="add-subtask-row">
-            <input v-model="newSubTask" type="text" placeholder="Tambah sub-task baru" @keyup.enter="addSubTask" />
-            <button class="btn-primary" :disabled="!canAddSubTask" @click="addSubTask">Input Sub-Task</button>
+        <!-- PROGRESS -->
+        <div class="h-2 bg-slate-100 rounded-full mb-4">
+          <div
+            class="h-full bg-blue-500 rounded-full"
+            :style="{ width: completionPercent + '%' }"
+          />
+        </div>
+
+        <!-- LIST -->
+        <div v-if="task.subtasks?.length" class="space-y-2">
+          <div
+            v-for="sub in task.subtasks"
+            :key="sub.id"
+            class="flex items-center gap-3 border rounded-xl p-3"
+          >
+            <button @click="toggleSubtask(task.id, sub.id)">
+              <CheckCircle2 v-if="sub.completed" class="w-5 h-5 text-blue-500" />
+              <Circle v-else class="w-5 h-5 text-slate-400" />
+            </button>
+
+            <input
+              :value="sub.title"
+              @input="updateSubtask(task.id, sub.id, $event.target.value)"
+              class="flex-1 bg-transparent outline-none"
+              :class="sub.completed && 'line-through text-slate-400'"
+            />
+
+            <button @click="deleteSubtask(task.id, sub.id)">
+              <Trash2 class="w-4 h-4 text-slate-400 hover:text-red-500" />
+            </button>
           </div>
-        </section>
-      </section>
-    </main>
-  </div>
+        </div>
+
+        <div v-else class="text-center text-slate-400 py-4">
+          Belum ada subtask
+        </div>
+
+        <!-- INPUT -->
+        <div class="flex gap-2 mt-4">
+          <input
+            v-model="newSubtask"
+            class="flex-1 border rounded-xl px-3 py-2"
+            placeholder="Tambah subtask..."
+            @keyup.enter="handleAddSubtask"
+          />
+          <button
+            @click="handleAddSubtask"
+            class="bg-blue-500 text-white px-4 rounded-xl"
+          >
+            +
+          </button>
+        </div>
+      </AppCard>
+
+    </div>
+
+    <!-- NOT FOUND -->
+    <AppCard v-else class="p-6 text-center">
+      Task tidak ditemukan
+    </AppCard>
+  </MainLayout>
 </template>
-
-<style scoped>
-.detail-page {
-  display: grid;
-  gap: 20px;
-}
-
-.header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-h1,
-h2 {
-  margin: 0;
-}
-
-.state-card {
-  display: grid;
-  gap: 12px;
-  max-width: 520px;
-}
-
-.title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.action-row {
-  display: flex;
-  gap: 8px;
-}
-
-.meta-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.meta-grid label,
-.field-block {
-  display: grid;
-  gap: 6px;
-  font-size: 0.85rem;
-  color: #5f6875;
-}
-
-input,
-textarea {
-  width: 100%;
-  border: 1px solid #d8dce5;
-  border-radius: 8px;
-  padding: 10px;
-}
-
-input:disabled,
-textarea:disabled {
-  background: #f7f8fb;
-}
-
-.field-block {
-  margin-bottom: 12px;
-}
-
-.subtask-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.subtask-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border: 1px solid #eceff3;
-  border-radius: 12px;
-  padding: 12px;
-  background: #fcfdff;
-}
-
-.subtask-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-}
-
-.subtask-checkbox {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-.subtask-content {
-  display: block;
-  min-width: 0;
-}
-
-.subtask-title {
-  display: block;
-  color: #253041;
-  font-weight: 500;
-  line-height: 1.35;
-  word-break: break-word;
-}
-
-.done {
-  text-decoration: line-through;
-  color: #7e8794;
-}
-
-.subtask-stats {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.stat-pill {
-  font-size: 0.78rem;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid #d7deea;
-  color: #4c5870;
-  background: #f7f9fd;
-}
-
-.done-pill {
-  border-color: #b9e5ca;
-  background: #edf9f1;
-  color: #2f7f4c;
-}
-
-.remain-pill {
-  border-color: #f2d0d3;
-  background: #fff5f6;
-  color: #a13e47;
-}
-
-.progress-track {
-  width: 100%;
-  height: 10px;
-  background: #edf1f7;
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 10px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4a70a9, #66a2c9);
-  border-radius: 999px;
-  transition: width 0.2s ease;
-}
-
-.empty-subtask {
-  margin-top: 14px;
-  border: 1px dashed #ccd5e2;
-  border-radius: 10px;
-  padding: 12px;
-  color: #647089;
-  background: #fafcff;
-}
-
-.add-subtask-row {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-}
-
-.progress {
-  margin: 0;
-  color: #4a70a9;
-  font-weight: 700;
-}
-
-.btn-primary,
-.btn-outline,
-.btn-danger,
-.btn-danger-ghost,
-.btn-back {
-  border-radius: 8px;
-  padding: 9px 12px;
-  cursor: pointer;
-}
-
-.btn-primary {
-  background: #4a70a9;
-  color: #fff;
-  border: 1px solid #4a70a9;
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-outline,
-.btn-back {
-  background: #fff;
-  color: #4a70a9;
-  border: 1px solid #4a70a9;
-}
-
-.btn-danger {
-  background: #cd3842;
-  color: #fff;
-  border: 1px solid #cd3842;
-}
-
-.btn-danger-ghost {
-  background: #fff;
-  color: #cd3842;
-  border: 1px solid #cd3842;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-@media (max-width: 960px) {
-  .meta-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .title-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .subtask-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .btn-danger-ghost {
-    width: 100%;
-  }
-
-  .add-subtask-row {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
