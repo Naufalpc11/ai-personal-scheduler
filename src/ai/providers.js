@@ -151,6 +151,10 @@ const callGeminiProvider = async ({ provider, baseUrl, apiKey, model, systemProm
 
 // Mengembalikan runner sesuai provider agar engine tetap netral terhadap provider.
 const createProviderRunner = (providerName, config) => {
+  if (providerName === "ollama") {
+    return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
+  }
+
   if (providerName === "openai") {
     return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
   }

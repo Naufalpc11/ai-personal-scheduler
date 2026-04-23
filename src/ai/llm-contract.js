@@ -22,13 +22,18 @@ const recommendationTypeEnum = z.enum(["next_action", "productivity_tip", "remin
 const priorityEnum = z.enum(["low", "medium", "high"]);
 const statusEnum = z.enum(["pending", "in_progress", "done"]);
 
+// Kontrak utama output LLM untuk seluruh use-case scheduler.
 const llmOutputSchema = z
   .object({
+    // Penanda versi kontrak agar backward-compatibility lebih mudah dijaga.
     version: z.string().default("1.0"),
+    // Jenis aksi yang dipahami AI dari request pengguna.
     intent: intentEnum,
+    // Request asli pengguna untuk jejak audit/debug.
     userRequest: z.string().min(1),
     locale: z.string().min(2).default("id-ID"),
     timezone: z.string().min(1).default("Asia/Jakarta"),
+    // Informasi task utama yang menjadi akar semua output AI.
     mainTask: z
       .object({
         title: z.string().min(3).max(120),
@@ -37,17 +42,20 @@ const llmOutputSchema = z
         status: statusEnum,
       })
       .optional(),
+    // Daftar subtask untuk breakdown pekerjaan utama.
     subtasks: z
       .array(
         z.object({
           title: z.string().min(1).max(120),
           notes: z.string().max(300).nullable().optional(),
+          // Nomor urut agar UI/engine bisa menjaga urutan langkah.
           order: z.coerce.number().int().min(1),
           estimatedMinutes: z.coerce.number().int().min(5).max(480),
           isFlexible: z.boolean(),
         })
       )
       .default([]),
+    // Estimasi opsional untuk tiap subtask beserta confidence AI.
     estimatedDurationPerSubtask: z
       .array(
         z.object({
@@ -57,9 +65,11 @@ const llmOutputSchema = z
         })
       )
       .default([]),
+    // Batasan yang dipakai AI saat menyusun atau memindah jadwal.
     schedulingConstraints: z
       .object({
         deadline: z.string().datetime().nullable().optional(),
+        // Preferensi jam produktif pengguna untuk tiap hari.
         preferredTimeWindows: z
           .array(
             z.object({
@@ -69,6 +79,7 @@ const llmOutputSchema = z
             })
           )
           .default([]),
+        // Agenda tetap yang harus dihindari dari bentrok.
         fixedEvents: z
           .array(
             z.object({
@@ -82,6 +93,7 @@ const llmOutputSchema = z
         allowWeekend: z.boolean().default(false),
       })
       .optional(),
+    // Slot jadwal final yang siap diubah menjadi entitas schedule.
     schedulePlan: z
       .array(
         z.object({
@@ -93,6 +105,7 @@ const llmOutputSchema = z
         })
       )
       .default([]),
+    // Khusus reschedule: pemicu konflik, konflik lama, dan slot pengganti.
     reschedulePlan: z
       .object({
         trigger: z.object({
@@ -121,6 +134,7 @@ const llmOutputSchema = z
           .default([]),
       })
       .optional(),
+    // Saran non-jadwal seperti next action atau productivity tip.
     recommendations: z
       .array(
         z.object({
@@ -130,6 +144,7 @@ const llmOutputSchema = z
         })
       )
       .default([]),
+    // Metadata hasil generasi: model, confidence, dan asumsi.
     meta: z
       .object({
         model: z.string().min(1),
@@ -141,9 +156,11 @@ const llmOutputSchema = z
       .optional(),
   })
   .passthrough()
+  // Aturan lintas-field berbasis intent yang tidak bisa ditangkap oleh field-level schema.
   .superRefine((value, context) => {
     const intent = value.intent;
 
+    // Semua intent kecuali recommend wajib punya mainTask.
     if (!value.mainTask && intent !== "recommend") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -152,6 +169,7 @@ const llmOutputSchema = z
       });
     }
 
+    // Intent create/auto_schedule minimal punya satu subtask.
     if ((intent === "create_task" || intent === "auto_schedule") && value.subtasks.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -160,6 +178,7 @@ const llmOutputSchema = z
       });
     }
 
+    // Intent terkait jadwal harus menyertakan constraints.
     if ((intent === "create_task" || intent === "auto_schedule" || intent === "reschedule") && !value.schedulingConstraints) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -168,6 +187,7 @@ const llmOutputSchema = z
       });
     }
 
+    // Create/auto_schedule wajib menghasilkan rencana jadwal.
     if ((intent === "create_task" || intent === "auto_schedule") && value.schedulePlan.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -176,6 +196,7 @@ const llmOutputSchema = z
       });
     }
 
+    // Reschedule wajib menjelaskan rencana perpindahan.
     if (intent === "reschedule" && !value.reschedulePlan) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -184,6 +205,7 @@ const llmOutputSchema = z
       });
     }
 
+    // Recommend wajib berisi daftar rekomendasi.
     if (intent === "recommend" && value.recommendations.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -192,6 +214,7 @@ const llmOutputSchema = z
       });
     }
 
+    // Metadata dibutuhkan untuk transparansi hasil AI.
     if (!value.meta) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -267,6 +290,7 @@ const parseLlmJson = (response) => {
 // Memvalidasi payload hasil parse terhadap kontrak output LLM yang ketat.
 const validateLlmOutput = (payload) => llmOutputSchema.parse(payload);
 
+// Mengekspor schema dan helper parser agar dipakai engine AI.
 module.exports = {
   llmOutputSchema,
   parseLlmJson,

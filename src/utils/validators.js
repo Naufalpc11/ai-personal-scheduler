@@ -146,8 +146,8 @@ const aiResultSchema = z.object({
   query: z.object({}),
 });
 
-// Supported provider selector for AI generation endpoints.
-const aiProviderSchema = z.enum(["auto", "openai", "gemini"]);
+// Pilihan provider untuk endpoint AI generate/execute.
+const aiProviderSchema = z.enum(["auto", "ollama", "openai", "gemini"]);
 
 // Request schema for generate/execute AI planning pipeline.
 const aiGenerateSchema = z.object({

@@ -2,18 +2,28 @@ const fs = require("fs");
 const path = require("path");
 const AppError = require("../utils/appError");
 const { parseLlmJson, validateLlmOutput } = require("./llm-contract");
-const { AiProviderError, createProviderRunner } = require("./providers");
+const { AiProviderError, createProviderRunner, normalizeBaseUrl } = require("./providers");
 
+// Memuat prompt kontrak sebagai instruksi dasar untuk seluruh provider.
 const contractPromptPath = path.join(__dirname, "prompts", "ollama-system-contract.txt");
 const contractPrompt = fs.readFileSync(contractPromptPath, "utf8");
 
+// Konfigurasi provider cloud yang aktif untuk proses generate AI.
 const providerConfigs = {
+  ollama: {
+    // Endpoint Ollama lokal (OpenAI-compatible) untuk model yang dijalankan di mesin sendiri.
+    baseUrl: normalizeBaseUrl(process.env.OLLAMA_BASE_URL || "http://localhost:11434", "/v1"),
+    apiKey: process.env.OLLAMA_API_KEY,
+    model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
+  },
   openai: {
+    // Endpoint OpenAI-compatible untuk model OpenAI.
     baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
   },
   gemini: {
+    // Endpoint resmi Gemini generateContent.
     baseUrl: process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta",
     apiKey: process.env.GEMINI_API_KEY,
     model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
@@ -22,7 +32,8 @@ const providerConfigs = {
 
 // Menyusun urutan provider dari ENV dan menghapus duplikasi.
 const defaultProviderOrder = (preferredProvider) => {
-  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "openai,gemini")
+  // Urutan default fallback bisa diatur lewat ENV.
+  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "ollama,openai,gemini")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -69,13 +80,13 @@ const resolveIntent = (userRequest, explicitIntent) => explicitIntent || inferIn
 
 // Menentukan urutan percobaan provider berdasarkan request dan kompleksitas.
 const resolveProviderOrder = ({ provider, intent, userRequest }) => {
+  // Jika user memilih provider spesifik, provider itu dicoba lebih dulu.
   const orderedCandidates =
     provider && provider !== "auto"
       ? [provider, ...defaultProviderOrder(provider)]
       : (() => {
-          const requestLength = userRequest.length;
-          const qualityFirst = intent === "reschedule" || requestLength > 180;
-          return qualityFirst ? ["openai", "gemini"] : ["gemini", "openai"];
+          // Mode auto default: lokal dulu, lalu cloud fallback jika gagal.
+          return ["ollama", "openai", "gemini"];
         })();
 
   const uniqueProviders = [];
@@ -93,6 +104,7 @@ const resolveProviderOrder = ({ provider, intent, userRequest }) => {
 
 // Menambahkan kontrak dan konteks runtime ke system prompt.
 const buildSystemPrompt = ({ providerName, intent, locale, timezone, context }) => {
+  // Context block ini membantu model tetap patuh kontrak tanpa output naratif tambahan.
   const contextBlock = JSON.stringify(
     {
       intent,
@@ -147,6 +159,7 @@ const createMessages = (payload, providerName, intent) => {
   });
 
   return {
+    // systemPrompt/userPrompt disertakan agar provider tertentu bisa pakai format non-chat jika perlu.
     systemPrompt,
     userPrompt,
     messages: [
@@ -193,6 +206,7 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
     output.meta = {};
   }
 
+  // Melengkapi field penting agar validasi kontrak tetap konsisten antar provider.
   output.version = output.version || "1.0";
   output.intent = output.intent || intent;
   output.userRequest = output.userRequest || fallbackUserRequest || "";
@@ -219,6 +233,7 @@ const generateAiPlan = async (payload) => {
   const providerOrder = resolveProviderOrder({ provider: payload.provider, intent, userRequest: payload.userRequest });
   const errors = [];
 
+  // Coba provider satu per satu sampai ada output valid atau semua gagal.
   for (const providerName of providerOrder) {
     const runner = createProviderRunner(providerName, buildProviderConfig(providerName, payload));
     const { messages, systemPrompt, userPrompt } = createMessages(payload, providerName, intent);
@@ -243,6 +258,7 @@ const generateAiPlan = async (payload) => {
         data: validated,
       };
     } catch (error) {
+      // Simpan jejak error agar mudah ditelusuri saat semua provider gagal.
       errors.push({
         provider: providerName,
         message: error.message,
@@ -261,6 +277,7 @@ const generateAiPlan = async (payload) => {
   );
 };
 
+// Mengekspor fungsi utama dan helper yang dipakai service/tes.
 module.exports = {
   generateAiPlan,
   resolveIntent,
