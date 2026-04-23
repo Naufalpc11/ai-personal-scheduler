@@ -10,6 +10,7 @@ class AiProviderError extends Error {
   }
 }
 
+// Menormalkan base URL dan menambahkan suffix bila diperlukan (contoh: /v1).
 const normalizeBaseUrl = (value, suffix) => {
   const baseUrl = (value || "").trim().replace(/\/$/, "");
 
@@ -24,8 +25,10 @@ const normalizeBaseUrl = (value, suffix) => {
   return `${baseUrl}${suffix}`;
 };
 
+// Mendeteksi pola pesan error kuota atau rate-limit dari provider.
 const isQuotaLikeMessage = (text) => /quota|billing|limit|rate\s*limit|insufficient|exceeded|token/i.test(text);
 
+// Membaca body error provider sebagai JSON jika memungkinkan, jika tidak sebagai teks.
 const readErrorText = async (response) => {
   const text = await response.text();
 
@@ -43,6 +46,7 @@ const readErrorText = async (response) => {
   }
 };
 
+// Mengubah respons non-2xx provider menjadi error domain yang seragam.
 const throwProviderError = async (provider, response) => {
   const { data, message } = await readErrorText(response);
   const quotaExceeded = response.status === 402 || response.status === 429 || isQuotaLikeMessage(message);
@@ -57,6 +61,7 @@ const throwProviderError = async (provider, response) => {
   });
 };
 
+// Memanggil endpoint chat completion yang kompatibel dengan OpenAI.
 const callOpenAiCompatibleProvider = async ({ provider, baseUrl, apiKey, model, messages, temperature }) => {
   const resolvedBaseUrl = normalizeBaseUrl(baseUrl, "/v1");
   if (!resolvedBaseUrl) {
@@ -96,6 +101,7 @@ const callOpenAiCompatibleProvider = async ({ provider, baseUrl, apiKey, model, 
   };
 };
 
+// Memanggil endpoint Gemini generateContent dengan mode respons JSON.
 const callGeminiProvider = async ({ provider, baseUrl, apiKey, model, systemPrompt, userPrompt, temperature }) => {
   if (!baseUrl || !apiKey) {
     throw new AiProviderError(`Provider ${provider} is not configured`, {
@@ -143,6 +149,7 @@ const callGeminiProvider = async ({ provider, baseUrl, apiKey, model, systemProm
   };
 };
 
+// Mengembalikan runner sesuai provider agar engine tetap netral terhadap provider.
 const createProviderRunner = (providerName, config) => {
   if (providerName === "openai") {
     return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });

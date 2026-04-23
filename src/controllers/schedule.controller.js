@@ -1,6 +1,7 @@
 const asyncHandler = require("../utils/asyncHandler");
 const scheduleService = require("../services/schedule.service");
 
+// Membuat jadwal baru untuk task milik pengguna.
 const createSchedule = asyncHandler(async (req, res) => {
   const schedule = await scheduleService.createSchedule(req.user.id, req.body);
 
@@ -11,6 +12,7 @@ const createSchedule = asyncHandler(async (req, res) => {
   });
 });
 
+// Mengambil seluruh jadwal milik pengguna.
 const getSchedules = asyncHandler(async (req, res) => {
   const schedules = await scheduleService.getSchedules(req.user.id);
 
@@ -20,6 +22,7 @@ const getSchedules = asyncHandler(async (req, res) => {
   });
 });
 
+// Memperbarui jadwal berdasarkan ID.
 const updateSchedule = asyncHandler(async (req, res) => {
   const schedule = await scheduleService.updateSchedule(req.user.id, req.params.id, req.body);
 
@@ -30,6 +33,7 @@ const updateSchedule = asyncHandler(async (req, res) => {
   });
 });
 
+// Menghapus jadwal berdasarkan ID.
 const deleteSchedule = asyncHandler(async (req, res) => {
   await scheduleService.deleteSchedule(req.user.id, req.params.id);
 

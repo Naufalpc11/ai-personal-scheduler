@@ -20,6 +20,7 @@ const providerConfigs = {
   },
 };
 
+// Menyusun urutan provider dari ENV dan menghapus duplikasi.
 const defaultProviderOrder = (preferredProvider) => {
   const configuredOrder = (process.env.AI_PROVIDER_ORDER || "openai,gemini")
     .split(",")
@@ -40,6 +41,7 @@ const defaultProviderOrder = (preferredProvider) => {
   return uniqueOrder;
 };
 
+// Menebak intent scheduler dari teks pengguna saat intent tidak dikirim.
 const inferIntentFromRequest = (userRequest) => {
   const normalized = userRequest.toLowerCase();
 
@@ -62,8 +64,10 @@ const inferIntentFromRequest = (userRequest) => {
   return "create_task";
 };
 
+// Memprioritaskan intent eksplisit, jika kosong pakai hasil inferensi.
 const resolveIntent = (userRequest, explicitIntent) => explicitIntent || inferIntentFromRequest(userRequest);
 
+// Menentukan urutan percobaan provider berdasarkan request dan kompleksitas.
 const resolveProviderOrder = ({ provider, intent, userRequest }) => {
   const orderedCandidates =
     provider && provider !== "auto"
@@ -87,6 +91,7 @@ const resolveProviderOrder = ({ provider, intent, userRequest }) => {
   return uniqueProviders;
 };
 
+// Menambahkan kontrak dan konteks runtime ke system prompt.
 const buildSystemPrompt = ({ providerName, intent, locale, timezone, context }) => {
   const contextBlock = JSON.stringify(
     {
@@ -109,6 +114,7 @@ const buildSystemPrompt = ({ providerName, intent, locale, timezone, context }) 
   return `${contractPrompt.trim()}\n\nProvider: ${providerName}\n\nContract context:\n${contextBlock}`;
 };
 
+// Menyerialkan konteks request pengguna ke JSON agar prompt konsisten.
 const buildUserPrompt = ({ userRequest, intent, locale, timezone, context }) =>
   JSON.stringify(
     {
@@ -122,6 +128,7 @@ const buildUserPrompt = ({ userRequest, intent, locale, timezone, context }) =>
     2
   );
 
+// Membuat payload prompt netral provider (messages + teks prompt mentah).
 const createMessages = (payload, providerName, intent) => {
   const systemPrompt = buildSystemPrompt({
     providerName,
@@ -149,6 +156,7 @@ const createMessages = (payload, providerName, intent) => {
   };
 };
 
+// Menentukan apakah error perlu memicu fallback ke provider lain.
 const shouldFallback = (error) => {
   if (error instanceof AiProviderError) {
     return error.retryable;
@@ -162,6 +170,7 @@ const shouldFallback = (error) => {
   return false;
 };
 
+// Menggabungkan konfigurasi provider statis dan opsi generate dari request.
 const buildProviderConfig = (providerName, payload) => {
   const config = providerConfigs[providerName];
 
@@ -178,6 +187,7 @@ const buildProviderConfig = (providerName, payload) => {
   };
 };
 
+// Melengkapi field opsional yang kosong sebelum validasi schema.
 const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
   if (!output.meta) {
     output.meta = {};
@@ -203,6 +213,7 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
   return output;
 };
 
+// Orkestrasi utama: pilih provider, panggil model, parse JSON, validasi, lalu fallback jika perlu.
 const generateAiPlan = async (payload) => {
   const intent = resolveIntent(payload.userRequest, payload.intent);
   const providerOrder = resolveProviderOrder({ provider: payload.provider, intent, userRequest: payload.userRequest });

@@ -1,6 +1,7 @@
 const asyncHandler = require("../utils/asyncHandler");
 const subtaskService = require("../services/subtask.service");
 
+// Menambahkan subtask baru pada task tertentu.
 const createSubtask = asyncHandler(async (req, res) => {
   const subtask = await subtaskService.createSubtask(req.user.id, req.params.id, req.body);
 
@@ -11,6 +12,7 @@ const createSubtask = asyncHandler(async (req, res) => {
   });
 });
 
+// Mengambil seluruh subtask berdasarkan task ID.
 const getSubtasksByTask = asyncHandler(async (req, res) => {
   const subtasks = await subtaskService.getSubtasksByTask(req.user.id, req.params.id);
 
@@ -20,6 +22,7 @@ const getSubtasksByTask = asyncHandler(async (req, res) => {
   });
 });
 
+// Memperbarui subtask berdasarkan ID.
 const updateSubtask = asyncHandler(async (req, res) => {
   const subtask = await subtaskService.updateSubtask(req.user.id, req.params.id, req.body);
 
@@ -30,6 +33,7 @@ const updateSubtask = asyncHandler(async (req, res) => {
   });
 });
 
+// Menghapus subtask berdasarkan ID.
 const deleteSubtask = asyncHandler(async (req, res) => {
   await subtaskService.deleteSubtask(req.user.id, req.params.id);
 

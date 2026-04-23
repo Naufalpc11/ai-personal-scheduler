@@ -1,6 +1,7 @@
 const asyncHandler = require("../utils/asyncHandler");
 const aiService = require("../services/ai.service");
 
+// Menyimpan payload AI yang sudah jadi ke task, subtask, dan jadwal.
 const handleAiResult = asyncHandler(async (req, res) => {
   const task = await aiService.handleAiResult(req.user.id, req.body);
 
@@ -11,6 +12,7 @@ const handleAiResult = asyncHandler(async (req, res) => {
   });
 });
 
+// Menghasilkan rencana AI terverifikasi tanpa menyimpannya ke database.
 const handleAiGenerate = asyncHandler(async (req, res) => {
   const result = await aiService.generateAiResult(req.body);
 
@@ -25,6 +27,7 @@ const handleAiGenerate = asyncHandler(async (req, res) => {
   });
 });
 
+// Menjalankan alur penuh: generate rencana AI, transform data, lalu simpan.
 const handleAiExecute = asyncHandler(async (req, res) => {
   const result = await aiService.generateAndSaveAiResult(req.user.id, req.body);
 

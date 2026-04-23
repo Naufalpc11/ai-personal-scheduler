@@ -2,11 +2,13 @@ const prisma = require("../prisma/client");
 const AppError = require("../utils/appError");
 const { generateAiPlan } = require("../ai/ai-engine");
 
+// Normalizes a date-time string to a UTC date-only value.
 const toDateOnly = (value) => {
   const date = new Date(value);
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 };
 
+// Persists task graph (task, subtasks, schedule) in a single transaction.
 const handleAiResult = async (userId, payload) => {
   return prisma.$transaction(async (tx) => {
     const task = await tx.task.create({
@@ -51,10 +53,12 @@ const handleAiResult = async (userId, payload) => {
   });
 };
 
+// Delegates to AI engine to produce validated planning output.
 const generateAiResult = async (payload) => {
   return generateAiPlan(payload);
 };
 
+// Maps LLM contract output into the persistence payload shape.
 const transformGeneratedPlanToPayload = (plan) => {
   const title = plan?.mainTask?.title || plan?.userRequest;
 
@@ -77,6 +81,7 @@ const transformGeneratedPlanToPayload = (plan) => {
   };
 };
 
+// Executes generate + transform + persist in one service call.
 const generateAndSaveAiResult = async (userId, payload) => {
   const generated = await generateAiPlan(payload);
   const persistablePayload = transformGeneratedPlanToPayload(generated.data);

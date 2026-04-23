@@ -201,6 +201,7 @@ const llmOutputSchema = z
     }
   });
 
+// Mengambil teks jawaban model dari format respons OpenAI atau Gemini.
 const extractAssistantText = (response) => {
   if (typeof response === "string") {
     return response;
@@ -229,6 +230,7 @@ const extractAssistantText = (response) => {
   return "";
 };
 
+// Menghapus bungkus markdown code fence jika model mengembalikannya.
 const stripCodeFences = (text) => {
   const trimmed = text.trim();
 
@@ -242,6 +244,7 @@ const stripCodeFences = (text) => {
     .trim();
 };
 
+// Mem-parse output model ke JSON dengan fallback ekstraksi saat respons berisik.
 const parseLlmJson = (response) => {
   const rawText = stripCodeFences(extractAssistantText(response));
 
@@ -261,6 +264,7 @@ const parseLlmJson = (response) => {
   }
 };
 
+// Memvalidasi payload hasil parse terhadap kontrak output LLM yang ketat.
 const validateLlmOutput = (payload) => llmOutputSchema.parse(payload);
 
 module.exports = {

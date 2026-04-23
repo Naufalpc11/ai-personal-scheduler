@@ -1,6 +1,7 @@
 const asyncHandler = require("../utils/asyncHandler");
 const taskService = require("../services/task.service");
 
+// Membuat task baru untuk pengguna yang sedang login.
 const createTask = asyncHandler(async (req, res) => {
   const task = await taskService.createTask(req.user.id, req.body);
 
@@ -11,6 +12,7 @@ const createTask = asyncHandler(async (req, res) => {
   });
 });
 
+// Mengambil seluruh task milik pengguna.
 const getTasks = asyncHandler(async (req, res) => {
   const tasks = await taskService.getTasks(req.user.id);
 
@@ -20,6 +22,7 @@ const getTasks = asyncHandler(async (req, res) => {
   });
 });
 
+// Mengambil detail satu task berdasarkan ID.
 const getTaskById = asyncHandler(async (req, res) => {
   const task = await taskService.getTaskById(req.user.id, req.params.id);
 
@@ -29,6 +32,7 @@ const getTaskById = asyncHandler(async (req, res) => {
   });
 });
 
+// Memperbarui data task berdasarkan ID.
 const updateTask = asyncHandler(async (req, res) => {
   const task = await taskService.updateTask(req.user.id, req.params.id, req.body);
 
@@ -39,6 +43,7 @@ const updateTask = asyncHandler(async (req, res) => {
   });
 });
 
+// Menghapus task berdasarkan ID.
 const deleteTask = asyncHandler(async (req, res) => {
   await taskService.deleteTask(req.user.id, req.params.id);
 
