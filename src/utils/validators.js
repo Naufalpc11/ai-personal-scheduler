@@ -146,8 +146,8 @@ const aiResultSchema = z.object({
   query: z.object({}),
 });
 
-// Pilihan provider untuk endpoint AI generate/execute.
-const aiProviderSchema = z.enum(["auto", "ollama", "openai", "gemini"]);
+// Pilihan provider untuk endpoint AI generate/execute (mode Ollama-only).
+const aiProviderSchema = z.enum(["auto", "ollama"]);
 
 // Request schema for generate/execute AI planning pipeline.
 const aiGenerateSchema = z.object({

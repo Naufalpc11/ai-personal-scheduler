@@ -101,66 +101,10 @@ const callOpenAiCompatibleProvider = async ({ provider, baseUrl, apiKey, model, 
   };
 };
 
-// Memanggil endpoint Gemini generateContent dengan mode respons JSON.
-const callGeminiProvider = async ({ provider, baseUrl, apiKey, model, systemPrompt, userPrompt, temperature }) => {
-  if (!baseUrl || !apiKey) {
-    throw new AiProviderError(`Provider ${provider} is not configured`, {
-      provider,
-      statusCode: 500,
-      retryable: false,
-    });
-  }
-
-  const resolvedBaseUrl = baseUrl.replace(/\/$/, "");
-  const response = await fetch(`${resolvedBaseUrl}/models/${model}:generateContent?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: systemPrompt }],
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: userPrompt }],
-        },
-      ],
-      generationConfig: {
-        temperature,
-        responseMimeType: "application/json",
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    await throwProviderError(provider, response);
-  }
-
-  const data = await response.json();
-  const content = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || "").join("");
-
-  return {
-    provider,
-    model: data?.modelVersion || model,
-    content,
-    raw: data,
-  };
-};
-
 // Mengembalikan runner sesuai provider agar engine tetap netral terhadap provider.
 const createProviderRunner = (providerName, config) => {
   if (providerName === "ollama") {
     return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
-  }
-
-  if (providerName === "openai") {
-    return async (input) => callOpenAiCompatibleProvider({ provider: providerName, ...config, ...input });
-  }
-
-  if (providerName === "gemini") {
-    return async (input) => callGeminiProvider({ provider: providerName, ...config, ...input });
   }
 
   throw new AiProviderError(`Unknown provider: ${providerName}`, {

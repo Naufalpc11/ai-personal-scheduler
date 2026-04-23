@@ -149,20 +149,16 @@ Authorization: Bearer <token>
 ### AI Execute
 - `POST /api/ai-execute`
 
-Endpoint ini mencoba provider sesuai urutan `AI_PROVIDER_ORDER`. Kalau provider pertama gagal karena auth, quota, atau rate limit, backend otomatis pindah ke provider berikutnya.
-
-Default yang direkomendasikan untuk mode lokal: `ollama -> openai -> gemini`.
+Endpoint ini mencoba provider sesuai urutan `AI_PROVIDER_ORDER`. Pada konfigurasi saat ini, project dijalankan dalam mode `Ollama-only`.
 
 `/api/ai-generate` hanya mengembalikan output AI yang sudah divalidasi. `/api/ai-execute` menjalankan generate lalu langsung menyimpan hasil ke database.
 
 Contoh ENV yang dipakai:
 
 ```env
-AI_PROVIDER_ORDER="ollama,openai,gemini"
+AI_PROVIDER_ORDER="ollama"
 OLLAMA_BASE_URL="http://localhost:11434"
 OLLAMA_MODEL="gpt-oss:20b"
-OPENAI_API_KEY="..."
-GEMINI_API_KEY="..."
 ```
 
 Tes awal paling aman:

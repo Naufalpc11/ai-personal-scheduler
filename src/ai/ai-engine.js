@@ -16,24 +16,12 @@ const providerConfigs = {
     apiKey: process.env.OLLAMA_API_KEY,
     model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
   },
-  openai: {
-    // Endpoint OpenAI-compatible untuk model OpenAI.
-    baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-    apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
-  },
-  gemini: {
-    // Endpoint resmi Gemini generateContent.
-    baseUrl: process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta",
-    apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-  },
 };
 
 // Menyusun urutan provider dari ENV dan menghapus duplikasi.
 const defaultProviderOrder = (preferredProvider) => {
   // Urutan default fallback bisa diatur lewat ENV.
-  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "ollama,openai,gemini")
+  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "ollama")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -85,8 +73,8 @@ const resolveProviderOrder = ({ provider, intent, userRequest }) => {
     provider && provider !== "auto"
       ? [provider, ...defaultProviderOrder(provider)]
       : (() => {
-          // Mode auto default: lokal dulu, lalu cloud fallback jika gagal.
-          return ["ollama", "openai", "gemini"];
+          // Mode auto di project ini dipaksa hanya lewat Ollama.
+          return ["ollama"];
         })();
 
   const uniqueProviders = [];
