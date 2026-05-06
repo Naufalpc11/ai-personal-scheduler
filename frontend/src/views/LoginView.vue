@@ -21,7 +21,7 @@ const features = [
   { icon: Zap, color: 'text-amber-500', bg: 'bg-amber-50', label: 'Super Cepat' }
 ]
 
-function handleLogin() {
+async function handleLogin() {
   error.value = ''
 
   if (!email.value || !password.value) {
@@ -30,13 +30,14 @@ function handleLogin() {
   }
 
   isLoading.value = true
-  setTimeout(() => {
-    const name = email.value.split('@')[0]
-    const displayName = name.charAt(0).toUpperCase() + name.slice(1)
-    login(displayName, email.value)
+  try {
+    await login(email.value, password.value)
     router.push('/')
+  } catch (err) {
+    error.value = err?.message || 'Login gagal.'
+  } finally {
     isLoading.value = false
-  }, 600)
+  }
 }
 </script>
 

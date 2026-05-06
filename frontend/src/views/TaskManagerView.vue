@@ -22,6 +22,8 @@ const viewMode = ref('day')
 const selectedDate = ref(TODAY_DATE)
 const searchQuery = ref('')
 const showForm = ref(false)
+const submitError = ref('')
+const isSubmitting = ref(false)
 
 const form = reactive({
   title: '',
@@ -102,25 +104,33 @@ function resetForm() {
   form.description = ''
 }
 
-function submitTask() {
+async function submitTask() {
   if (!form.title.trim() || !form.date || !form.startTime || !form.endTime) return
+  submitError.value = ''
+  isSubmitting.value = true
 
-  addTask({
-    title: form.title,
-    description: form.description,
-    date: form.date,
-    startTime: form.startTime,
-    endTime: form.endTime,
-    duration: buildDuration(form.startTime, form.endTime),
-    category: form.category,
-    color: form.color,
-    priority: 'medium',
-    status: 'pending',
-    subtasks: []
-  })
+  try {
+    await addTask({
+      title: form.title,
+      description: form.description,
+      date: form.date,
+      startTime: form.startTime,
+      endTime: form.endTime,
+      duration: buildDuration(form.startTime, form.endTime),
+      category: form.category,
+      color: form.color,
+      priority: 'medium',
+      status: 'pending',
+      subtasks: []
+    })
 
-  resetForm()
-  showForm.value = false
+    resetForm()
+    showForm.value = false
+  } catch (error) {
+    submitError.value = error?.message || 'Gagal membuat task.'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 function countSubtask(task) {
@@ -276,7 +286,16 @@ function countSubtask(task) {
               <textarea v-model="form.description" class="min-h-20 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="Tambah catatan..." />
             </div>
 
-            <AppButton class-name="w-full" type="submit">Buat Task</AppButton>
+            <div v-if="submitError" class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-500">
+              {{ submitError }}
+            </div>
+            <AppButton class-name="w-full" :disabled="isSubmitting" type="submit">
+              <span v-if="!isSubmitting">Buat Task</span>
+              <span v-else class="inline-flex items-center gap-2">
+                <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Menyimpan...
+              </span>
+            </AppButton>
           </form>
         </div>
       </AppCard>

@@ -30,6 +30,8 @@ const messages = ref([
 ])
 const inputText = ref('')
 const isTyping = ref(false)
+const isSaving = ref(false)
+const error = ref('')
 const nextId = ref(2)
 const scrollAnchor = ref(null)
 const inputRef = ref(null)
@@ -152,23 +154,33 @@ function toggleTask(messageId, taskIndex) {
   })
 }
 
-function saveTasksFromMessage(messageId) {
+async function saveTasksFromMessage(messageId) {
   const message = messages.value.find((item) => item.id === messageId)
   if (!message?.tasks) return
 
   const selectedTasks = message.tasks.filter((task) => task.selected)
-  selectedTasks.forEach((task) => {
-    addTask({
-      title: task.title,
-      date: TODAY,
-      startTime: task.startTime,
-      endTime: task.endTime,
-      duration: task.duration,
-      category: task.category,
-      color: task.color,
-      notes: 'Dibuat oleh AI Scheduler'
-    })
-  })
+  if (!selectedTasks.length) return
+  error.value = ''
+  isSaving.value = true
+
+  try {
+    for (const task of selectedTasks) {
+      await addTask({
+        title: task.title,
+        date: TODAY,
+        startTime: task.startTime,
+        endTime: task.endTime,
+        duration: task.duration,
+        category: task.category,
+        color: task.color,
+        description: 'Dibuat oleh AI Scheduler'
+      })
+    }
+  } catch (err) {
+    error.value = err?.message || 'Gagal menyimpan task AI.'
+    isSaving.value = false
+    return
+  }
 
   messages.value = messages.value.map((item) => (
     item.id === messageId ? { ...item, saved: true } : item
@@ -183,6 +195,7 @@ function saveTasksFromMessage(messageId) {
       saved: false
     })
   }, 250)
+  isSaving.value = false
 }
 
 function handleReset() {
@@ -227,6 +240,10 @@ function canSave(message) {
           <RotateCcw class="h-3.5 w-3.5" />
           Reset
         </button>
+      </div>
+
+      <div v-if="error" class="border-b border-red-100 bg-red-50 px-4 py-3 text-sm text-red-500 lg:px-6">
+        {{ error }}
       </div>
 
       <div class="flex-1 overflow-y-auto bg-gray-50 px-4 py-4 lg:px-6">
@@ -274,11 +291,15 @@ function canSave(message) {
                   v-if="!message.saved"
                   class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
-                  :disabled="!canSave(message)"
+                  :disabled="!canSave(message) || isSaving"
                   @click="saveTasksFromMessage(message.id)"
                 >
-                  <CalendarPlus class="h-4 w-4" />
-                  Simpan ke Jadwal ({{ message.tasks?.filter((task) => task.selected).length ?? 0 }} task)
+                  <CalendarPlus v-if="!isSaving" class="h-4 w-4" />
+                  <span v-if="!isSaving">Simpan ke Jadwal ({{ message.tasks?.filter((task) => task.selected).length ?? 0 }} task)</span>
+                  <span v-else class="inline-flex items-center gap-2">
+                    <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Menyimpan...
+                  </span>
                 </button>
 
                 <div v-else class="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 py-2 text-sm font-medium text-emerald-600">

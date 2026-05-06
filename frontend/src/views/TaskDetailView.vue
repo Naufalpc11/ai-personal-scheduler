@@ -27,6 +27,8 @@ const {
 
 const newSubtask = ref('')
 const isEditingTask = ref(false)
+const error = ref('')
+const isSaving = ref(false)
 
 const editTitle = ref('')
 const editDescription = ref('')
@@ -47,17 +49,25 @@ const completionPercent = computed(() => {
 })
 
 // ================= ACTION =================
-function handleAddSubtask() {
+async function handleAddSubtask() {
   const title = newSubtask.value.trim()
   if (!title || !task.value) return
-  addSubtask(task.value.id, title)
-  newSubtask.value = ''
+  try {
+    await addSubtask(task.value.id, title)
+    newSubtask.value = ''
+  } catch (err) {
+    error.value = err?.message || 'Gagal menambah subtask.'
+  }
 }
 
-function handleDeleteTask() {
+async function handleDeleteTask() {
   if (!task.value) return
-  deleteTask(task.value.id)
-  router.push('/task-manager')
+  try {
+    await deleteTask(task.value.id)
+    router.push('/task-manager')
+  } catch (err) {
+    error.value = err?.message || 'Gagal menghapus task.'
+  }
 }
 
 function startEditTask() {
@@ -69,18 +79,26 @@ function startEditTask() {
   isEditingTask.value = true
 }
 
-function saveTaskEdit() {
+async function saveTaskEdit() {
   if (!task.value) return
+  error.value = ''
+  isSaving.value = true
 
-  updateTask(task.value.id, {
-    title: editTitle.value,
-    description: editDescription.value,
-    startTime: editStartTime.value,
-    endTime: editEndTime.value,
-    duration: buildDuration(editStartTime.value, editEndTime.value)
-  })
+  try {
+    await updateTask(task.value.id, {
+      title: editTitle.value,
+      description: editDescription.value,
+      startTime: editStartTime.value,
+      endTime: editEndTime.value,
+      duration: buildDuration(editStartTime.value, editEndTime.value)
+    })
 
-  isEditingTask.value = false
+    isEditingTask.value = false
+  } catch (err) {
+    error.value = err?.message || 'Gagal menyimpan perubahan.'
+  } finally {
+    isSaving.value = false
+  }
 }
 
 // ================= HELPER =================
@@ -130,6 +148,10 @@ function formatDate(date) {
         </button>
 
         <h1 class="text-2xl font-bold">{{ task.title }}</h1>
+      </div>
+
+      <div v-if="error" class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-500">
+        {{ error }}
       </div>
 
       <!-- DETAIL CARD -->

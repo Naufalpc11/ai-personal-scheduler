@@ -4,11 +4,16 @@ import { useAppStore } from './useAppStore'
 
 export function useRequireAuth() {
   const router = useRouter()
-  const { user } = useAppStore()
+  const { user, token, fetchTasks, state } = useAppStore()
 
   watchEffect(() => {
-    if (!user.value) {
+    if (!user.value || !token.value) {
       router.replace('/login')
+      return
+    }
+
+    if (!state.hasLoaded && !state.isLoading) {
+      fetchTasks()
     }
   })
 }

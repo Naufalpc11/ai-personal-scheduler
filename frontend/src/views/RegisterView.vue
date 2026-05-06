@@ -7,7 +7,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import { useAppStore } from '@/composables/useAppStore'
 
 const router = useRouter()
-const { login } = useAppStore()
+const { register } = useAppStore()
 
 const name = ref('')
 const email = ref('')
@@ -16,7 +16,7 @@ const confirmPassword = ref('')
 const showPassword = ref(false)
 const error = ref('')
 
-function handleRegister() {
+async function handleRegister() {
   error.value = ''
 
   if (password.value !== confirmPassword.value) {
@@ -29,8 +29,12 @@ function handleRegister() {
     return
   }
 
-  login(name.value, email.value)
-  router.push('/')
+  try {
+    await register(name.value, email.value, password.value)
+    router.push('/')
+  } catch (err) {
+    error.value = err?.message || 'Register gagal.'
+  }
 }
 </script>
 

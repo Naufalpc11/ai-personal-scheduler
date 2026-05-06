@@ -1,117 +1,115 @@
 import { computed, reactive, readonly } from 'vue'
+import { apiRequest } from '@/utils/api'
 
-const TODAY = '2026-04-21'
+const STORAGE_KEY = 'ai_scheduler_auth'
 
-const initialTasks = [
-  {
-    id: 1,
-    title: 'Kelas Pak Cahyo',
-    date: TODAY,
-    startTime: '09:00',
-    endTime: '11:00',
-    duration: '2 jam',
-    notes: 'Perancangan sistem berbasis AI. Kumpulkan tugas sebelum kelas dimulai.',
-    category: 'Kelas',
-    color: 'blue',
-    subtasks: [
-      { id: 1, title: 'Siapkan catatan', completed: true },
-      { id: 2, title: 'Kumpulkan tugas kelas', completed: false }
-    ]
-  },
-  {
-    id: 2,
-    title: 'Review PR Github',
-    date: TODAY,
-    startTime: '11:30',
-    endTime: '12:30',
-    duration: '1 jam',
-    notes: 'Review pull request dari tim untuk fitur authentication baru.',
-    category: 'Review',
-    color: 'purple',
-    subtasks: []
-  },
-  {
-    id: 3,
-    title: 'Beli Batagor',
-    date: TODAY,
-    startTime: '13:00',
-    endTime: '14:30',
-    duration: '1.5 jam',
-    notes: 'Beli batagor di warung Bu Siti. Jangan lupa uang cash.',
-    category: 'Personal',
-    color: 'amber',
-    subtasks: []
-  },
-  {
-    id: 4,
-    title: 'Sprint Planning Meeting',
-    date: TODAY,
-    startTime: '15:00',
-    endTime: '17:00',
-    duration: '2 jam',
-    notes: 'Sprint planning untuk minggu depan bersama seluruh tim dev.',
-    category: 'Meeting',
-    color: 'green',
-    subtasks: [
-      { id: 1, title: 'Siapkan backlog items', completed: false },
-      { id: 2, title: 'Review velocity sprint lalu', completed: false }
-    ]
-  },
-  {
-    id: 5,
-    title: 'Client Presentation',
-    date: '2026-04-22',
-    startTime: '10:00',
-    endTime: '12:00',
-    duration: '2 jam',
-    notes: 'Presentasi proposal sistem AI ke klien baru dari Jakarta.',
-    category: 'Meeting',
-    color: 'green',
-    subtasks: []
-  },
-  {
-    id: 6,
-    title: 'Belajar TypeScript',
-    date: '2026-04-22',
-    startTime: '14:00',
-    endTime: '16:00',
-    duration: '2 jam',
-    notes: 'Lanjut belajar advanced TypeScript patterns.',
-    category: 'Belajar',
-    color: 'blue',
-    subtasks: []
-  }
-]
-
-function normalizeTask(task) {
-  return {
-    id: task.id,
-    title: task.title,
-    description: task.description ?? task.notes ?? '',
-    date: task.date,
-    startTime: task.startTime,
-    endTime: task.endTime,
-    priority: task.priority ?? 'medium',
-    status: task.status ?? 'pending',
-    category: task.category ?? 'General',
-    color: task.color ?? 'blue',
-    subtasks: task.subtasks ?? []
-  }
-}
-
-function getSavedUser() {
+function getStoredAuth() {
   try {
-    const saved = localStorage.getItem('ai_scheduler_user')
+    const saved = localStorage.getItem(STORAGE_KEY)
     return saved ? JSON.parse(saved) : null
   } catch {
     return null
   }
 }
 
+const storedAuth = getStoredAuth()
+
 const state = reactive({
-  tasks: initialTasks.map((task) => normalizeTask(task)),
-  user: getSavedUser()
+  rawTasks: [],
+  user: storedAuth?.user || null,
+  token: storedAuth?.token || null,
+  isLoading: false,
+  error: null,
+  hasLoaded: false
 })
+
+function setAuth(user, token) {
+  state.user = user
+  state.token = token
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, token }))
+}
+
+function clearAuth() {
+  state.user = null
+  state.token = null
+  state.rawTasks = []
+  state.hasLoaded = false
+  localStorage.removeItem(STORAGE_KEY)
+}
+
+function toUiStatus(status) {
+  if (status === 'done') return 'completed'
+  return status
+}
+
+function toApiStatus(status) {
+  if (status === 'completed') return 'done'
+  return status
+}
+
+function toDateOnly(isoString) {
+  if (!isoString) return null
+  const date = new Date(isoString)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function toTimeOnly(isoString) {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function buildDuration(startIso, endIso) {
+  if (!startIso || !endIso) return '-'
+  const start = new Date(startIso)
+  const end = new Date(endIso)
+  const diffMinutes = Math.max(0, Math.round((end - start) / 60000))
+  if (!diffMinutes) return '0 menit'
+  const hours = Math.floor(diffMinutes / 60)
+  const minutes = diffMinutes % 60
+  if (hours && minutes) return `${hours} jam ${minutes} menit`
+  if (hours) return `${hours} jam`
+  return `${minutes} menit`
+}
+
+function pickPrimarySchedule(task) {
+  if (!task?.schedules?.length) return null
+  return [...task.schedules].sort((a, b) => new Date(a.startTime) - new Date(b.startTime))[0]
+}
+
+function mapSubtask(subtask) {
+  return {
+    id: subtask.id,
+    title: subtask.title,
+    completed: subtask.status === 'done',
+    status: toUiStatus(subtask.status)
+  }
+}
+
+function mapTask(task) {
+  const primarySchedule = pickPrimarySchedule(task)
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description || '',
+    date: primarySchedule ? toDateOnly(primarySchedule.startTime) : task.dueDate || null,
+    startTime: primarySchedule ? toTimeOnly(primarySchedule.startTime) : '',
+    endTime: primarySchedule ? toTimeOnly(primarySchedule.endTime) : '',
+    duration: primarySchedule ? buildDuration(primarySchedule.startTime, primarySchedule.endTime) : '-',
+    priority: 'medium',
+    status: toUiStatus(task.status),
+    category: 'General',
+    color: 'blue',
+    scheduleId: primarySchedule?.id || null,
+    subtasks: Array.isArray(task.subtasks) ? task.subtasks.map(mapSubtask) : []
+  }
+}
+
+function toScheduleIso(date, time) {
+  if (!date || !time) return null
+  const local = new Date(`${date}T${time}:00`)
+  return local.toISOString()
+}
 
 export const colorMap = {
   blue: { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', dot: 'bg-blue-400', badge: 'bg-blue-500', light: 'bg-blue-50' },
@@ -123,97 +121,225 @@ export const colorMap = {
 }
 
 export function useAppStore() {
-  const tasks = computed(() => state.tasks)
+  const tasks = computed(() => state.rawTasks.map(mapTask))
   const user = computed(() => state.user)
+  const token = computed(() => state.token)
 
-  function addTask(task) {
-    state.tasks.push(normalizeTask({ ...task, id: Date.now() }))
+  async function fetchTasks() {
+    if (!state.token) return
+    state.isLoading = true
+    state.error = null
+
+    try {
+      const response = await apiRequest('/tasks', { token: state.token })
+      state.rawTasks = response.data || []
+      state.hasLoaded = true
+    } catch (error) {
+      state.error = error.message
+    } finally {
+      state.isLoading = false
+    }
   }
 
-  function updateTask(id, updates) {
-    state.tasks = state.tasks.map((task) => (task.id === id ? { ...task, ...updates } : task))
-  }
+  async function addTask(task) {
+    if (!state.token) return null
+    state.error = null
 
-  function deleteTask(id) {
-    state.tasks = state.tasks.filter((task) => task.id !== id)
-  }
+    try {
+      const taskPayload = {
+        title: task.title,
+        description: task.description || '',
+        status: toApiStatus(task.status || 'pending'),
+        dueDate: task.date || null
+      }
+      const created = await apiRequest('/tasks', {
+        method: 'POST',
+        token: state.token,
+        body: taskPayload
+      })
 
-  function addSubtask(taskId, title) {
-    state.tasks = state.tasks.map((task) => {
-      if (task.id !== taskId) {
-        return task
+      const taskId = created.data?.id
+      const startIso = toScheduleIso(task.date, task.startTime)
+      const endIso = toScheduleIso(task.date, task.endTime)
+
+      if (taskId && startIso && endIso) {
+        await apiRequest('/schedule', {
+          method: 'POST',
+          token: state.token,
+          body: {
+            taskId,
+            startTime: startIso,
+            endTime: endIso
+          }
+        })
       }
 
-      return {
-        ...task,
-        subtasks: [
-          ...task.subtasks,
-          { id: Date.now(), title, completed: false }
-        ]
+      await fetchTasks()
+      return created.data
+    } catch (error) {
+      state.error = error.message
+      throw error
+    }
+  }
+
+  async function updateTask(id, updates) {
+    if (!state.token) return null
+    state.error = null
+
+    const payload = {}
+    if (updates.title !== undefined) payload.title = updates.title
+    if (updates.description !== undefined) payload.description = updates.description
+    if (updates.status !== undefined) payload.status = toApiStatus(updates.status)
+    if (updates.date !== undefined) payload.dueDate = updates.date
+
+    try {
+      await apiRequest(`/tasks/${id}`, {
+        method: 'PUT',
+        token: state.token,
+        body: payload
+      })
+
+      if (updates.startTime || updates.endTime || updates.date) {
+        const task = tasks.value.find((item) => item.id === id)
+        const scheduleId = task?.scheduleId
+        const date = updates.date || task?.date
+        const start = updates.startTime || task?.startTime
+        const end = updates.endTime || task?.endTime
+        const startIso = toScheduleIso(date, start)
+        const endIso = toScheduleIso(date, end)
+
+        if (scheduleId && startIso && endIso) {
+          await apiRequest(`/schedule/${scheduleId}`, {
+            method: 'PUT',
+            token: state.token,
+            body: {
+              startTime: startIso,
+              endTime: endIso
+            }
+          })
+        }
       }
+
+      await fetchTasks()
+    } catch (error) {
+      state.error = error.message
+      throw error
+    }
+  }
+
+  async function deleteTask(id) {
+    if (!state.token) return
+    state.error = null
+
+    try {
+      await apiRequest(`/tasks/${id}`, { method: 'DELETE', token: state.token })
+      await fetchTasks()
+    } catch (error) {
+      state.error = error.message
+      throw error
+    }
+  }
+
+  async function addSubtask(taskId, title) {
+    if (!state.token) return
+    state.error = null
+
+    try {
+      await apiRequest(`/tasks/${taskId}/subtasks`, {
+        method: 'POST',
+        token: state.token,
+        body: { title, status: 'pending' }
+      })
+      await fetchTasks()
+    } catch (error) {
+      state.error = error.message
+      throw error
+    }
+  }
+
+  async function updateSubtask(taskId, subtaskId, title) {
+    if (!state.token) return
+    state.error = null
+
+    try {
+      await apiRequest(`/subtasks/${subtaskId}`, {
+        method: 'PUT',
+        token: state.token,
+        body: { title }
+      })
+      await fetchTasks()
+    } catch (error) {
+      state.error = error.message
+      throw error
+    }
+  }
+
+  async function toggleSubtask(taskId, subtaskId) {
+    if (!state.token) return
+    state.error = null
+
+    const task = tasks.value.find((item) => item.id === taskId)
+    const subtask = task?.subtasks?.find((item) => item.id === subtaskId)
+    const nextStatus = subtask?.completed ? 'pending' : 'done'
+
+    try {
+      await apiRequest(`/subtasks/${subtaskId}`, {
+        method: 'PUT',
+        token: state.token,
+        body: { status: nextStatus }
+      })
+      await fetchTasks()
+    } catch (error) {
+      state.error = error.message
+      throw error
+    }
+  }
+
+  async function deleteSubtask(taskId, subtaskId) {
+    if (!state.token) return
+    state.error = null
+
+    try {
+      await apiRequest(`/subtasks/${subtaskId}`, { method: 'DELETE', token: state.token })
+      await fetchTasks()
+    } catch (error) {
+      state.error = error.message
+      throw error
+    }
+  }
+
+  async function register(name, email, password) {
+    state.error = null
+    const response = await apiRequest('/register', {
+      method: 'POST',
+      body: { name, email, password }
     })
+    setAuth(response.data.user, response.data.token)
+    await fetchTasks()
+    return response.data
   }
 
-  function updateSubtask(taskId, subtaskId, title) {
-    state.tasks = state.tasks.map((task) => {
-      if (task.id !== taskId) {
-        return task
-      }
-
-      return {
-        ...task,
-        subtasks: task.subtasks.map((subtask) => (
-          subtask.id === subtaskId ? { ...subtask, title } : subtask
-        ))
-      }
+  async function login(email, password) {
+    state.error = null
+    const response = await apiRequest('/login', {
+      method: 'POST',
+      body: { email, password }
     })
-  }
-
-  function toggleSubtask(taskId, subtaskId) {
-    state.tasks = state.tasks.map((task) => {
-      if (task.id !== taskId) {
-        return task
-      }
-
-      return {
-        ...task,
-        subtasks: task.subtasks.map((subtask) => (
-          subtask.id === subtaskId
-            ? { ...subtask, completed: !subtask.completed }
-            : subtask
-        ))
-      }
-    })
-  }
-
-  function deleteSubtask(taskId, subtaskId) {
-    state.tasks = state.tasks.map((task) => {
-      if (task.id !== taskId) {
-        return task
-      }
-
-      return {
-        ...task,
-        subtasks: task.subtasks.filter((subtask) => subtask.id !== subtaskId)
-      }
-    })
-  }
-
-  function login(name, email) {
-    const payload = { name, email }
-    localStorage.setItem('ai_scheduler_user', JSON.stringify(payload))
-    state.user = payload
+    setAuth(response.data.user, response.data.token)
+    await fetchTasks()
+    return response.data
   }
 
   function logout() {
-    localStorage.removeItem('ai_scheduler_user')
-    state.user = null
+    clearAuth()
   }
 
   return {
     state: readonly(state),
     tasks,
     user,
+    token,
+    fetchTasks,
     addTask,
     updateTask,
     deleteTask,
@@ -221,6 +347,7 @@ export function useAppStore() {
     updateSubtask,
     toggleSubtask,
     deleteSubtask,
+    register,
     login,
     logout
   }
