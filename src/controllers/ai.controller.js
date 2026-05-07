@@ -14,7 +14,31 @@ const handleAiResult = asyncHandler(async (req, res) => {
 
 // Menghasilkan rencana AI terverifikasi tanpa menyimpannya ke database.
 const handleAiGenerate = asyncHandler(async (req, res) => {
-  const result = await aiService.generateAiResult(req.body);
+  const result = await aiService.generateAiResult(req.user.id, req.body);
+
+  if (result.phase === "clarify") {
+    return res.status(200).json({
+      success: true,
+      message: "AI needs clarification",
+      data: result,
+    });
+  }
+
+  if (result.phase === "confirm") {
+    return res.status(200).json({
+      success: true,
+      message: "AI plan ready for confirmation",
+      data: result,
+    });
+  }
+
+  if (result.phase === "saved") {
+    return res.status(201).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -30,6 +54,22 @@ const handleAiGenerate = asyncHandler(async (req, res) => {
 // Menjalankan alur penuh: generate rencana AI, transform data, lalu simpan.
 const handleAiExecute = asyncHandler(async (req, res) => {
   const result = await aiService.generateAndSaveAiResult(req.user.id, req.body);
+
+  if (result.phase === "clarify" || result.phase === "confirm" || result.phase === "cancelled") {
+    return res.status(200).json({
+      success: true,
+      message: result.message || "AI response requires follow-up",
+      data: result,
+    });
+  }
+
+  if (result.phase === "saved") {
+    return res.status(201).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  }
 
   res.status(201).json({
     success: true,

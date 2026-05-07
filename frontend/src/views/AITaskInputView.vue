@@ -5,6 +5,7 @@ import MainLayout from '@/components/layout/MainLayout.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useAppStore } from '@/composables/useAppStore'
+import { apiRequest } from '@/utils/api'
 import { useRequireAuth } from '@/composables/useRequireAuth'
 
 useRequireAuth()
@@ -49,63 +50,61 @@ const categoryColors = {
   Lainnya: 'bg-gray-100 text-gray-600'
 }
 
-function generateAIResponse(prompt) {
-  const lower = prompt.toLowerCase()
+const { token } = useAppStore()
 
-  if (lower.includes('meeting') || lower.includes('rapat') || lower.includes('client')) {
-    return {
-      text: `Baik! Aku sudah menganalisis rencanamu tentang "${prompt.length > 50 ? `${prompt.slice(0, 50)}...` : prompt}".\n\nAku sarankan 3 task berikut agar meeting-mu berjalan lancar:`,
-      tasks: [
-        { title: 'Persiapan Materi Meeting', startTime: '08:00', endTime: '09:00', duration: '1 jam', category: 'Review', color: 'purple', selected: true },
-        { title: 'Meeting / Rapat', startTime: '09:00', endTime: '11:00', duration: '2 jam', category: 'Meeting', color: 'green', selected: true },
-        { title: 'Follow-up & Notulensi', startTime: '11:30', endTime: '12:00', duration: '30 menit', category: 'Review', color: 'blue', selected: false }
-      ]
-    }
+function mapIsoToTime(iso) {
+  try {
+    const d = new Date(iso)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  } catch {
+    return ''
+  }
+}
+
+function calcDurationText(startIso, endIso) {
+  try {
+    const s = new Date(startIso)
+    const e = new Date(endIso)
+    const diff = Math.round((e - s) / 60000)
+    if (diff <= 0) return '0 menit'
+    const h = Math.floor(diff / 60)
+    const m = diff % 60
+    if (h && m) return `${h} jam ${m} menit`
+    if (h) return `${h} jam`
+    return `${m} menit`
+  } catch {
+    return '-'
+  }
+}
+
+function mapOutputToTasks(output) {
+  // Prefer schedulePlan
+  if (Array.isArray(output.schedulePlan) && output.schedulePlan.length) {
+    return output.schedulePlan.map((item) => ({
+      title: item.subtaskTitle || item.reason || 'Task',
+      startTime: mapIsoToTime(item.startTime),
+      endTime: mapIsoToTime(item.endTime),
+      duration: calcDurationText(item.startTime, item.endTime),
+      category: 'Lainnya',
+      color: 'amber',
+      selected: true
+    }))
   }
 
-  if (lower.includes('kelas') || lower.includes('kuliah') || lower.includes('ai')) {
-    return {
-      text: 'Sip! Berdasarkan info kelasmu, aku siapkan jadwal yang efektif:',
-      tasks: [
-        { title: 'Sesi Kelas', startTime: '09:00', endTime: '11:00', duration: '2 jam', category: 'Kelas', color: 'blue', selected: true },
-        { title: 'Review Catatan Setelah Kelas', startTime: '11:15', endTime: '12:00', duration: '45 menit', category: 'Belajar', color: 'purple', selected: true },
-        { title: 'Kerjakan Tugas', startTime: '20:00', endTime: '21:30', duration: '1.5 jam', category: 'Belajar', color: 'amber', selected: false }
-      ]
-    }
+  // Fallback to subtasks with no times
+  if (Array.isArray(output.subtasks) && output.subtasks.length) {
+    return output.subtasks.map((st, idx) => ({
+      title: st.title || `Subtask ${idx + 1}`,
+      startTime: '09:00',
+      endTime: '10:00',
+      duration: '1 jam',
+      category: 'Lainnya',
+      color: 'amber',
+      selected: idx === 0
+    }))
   }
 
-  if (lower.includes('belajar') || lower.includes('study') || lower.includes('typescript') || lower.includes('coding')) {
-    return {
-      text: 'Semangat belajarnya bagus! Aku buat sesi belajar yang terstruktur:',
-      tasks: [
-        { title: 'Sesi Belajar / Coding', startTime: '14:00', endTime: '16:00', duration: '2 jam', category: 'Belajar', color: 'blue', selected: true },
-        { title: 'Istirahat Aktif (stretching)', startTime: '16:00', endTime: '16:15', duration: '15 menit', category: 'Personal', color: 'green', selected: true },
-        { title: 'Review & Rangkuman', startTime: '16:15', endTime: '17:00', duration: '45 menit', category: 'Belajar', color: 'purple', selected: false }
-      ]
-    }
-  }
-
-  if (lower.includes('presentasi') || lower.includes('presentation')) {
-    return {
-      text: 'Presentasi penting nih! Aku siapkan rundown lengkapnya:',
-      tasks: [
-        { title: 'Finalisasi Slide Presentasi', startTime: '08:00', endTime: '09:30', duration: '1.5 jam', category: 'Review', color: 'purple', selected: true },
-        { title: 'Gladi Resik / Latihan', startTime: '09:30', endTime: '10:00', duration: '30 menit', category: 'Personal', color: 'amber', selected: true },
-        { title: 'Presentasi ke Klien', startTime: '10:00', endTime: '12:00', duration: '2 jam', category: 'Meeting', color: 'green', selected: true },
-        { title: 'Follow-up Pasca Presentasi', startTime: '13:00', endTime: '13:30', duration: '30 menit', category: 'Review', color: 'blue', selected: false }
-      ]
-    }
-  }
-
-  const shortPrompt = prompt.length > 40 ? `${prompt.slice(0, 40)}...` : prompt
-  return {
-    text: 'Oke, aku pahami rencanamu! Berikut jadwal yang aku buat untuk kegiatanmu:',
-    tasks: [
-      { title: shortPrompt, startTime: '09:00', endTime: '11:00', duration: '2 jam', category: 'Lainnya', color: 'amber', selected: true },
-      { title: 'Persiapan sebelumnya', startTime: '08:30', endTime: '09:00', duration: '30 menit', category: 'Personal', color: 'pink', selected: false },
-      { title: 'Evaluasi & Catatan', startTime: '11:00', endTime: '11:30', duration: '30 menit', category: 'Review', color: 'blue', selected: false }
-    ]
-  }
+  return []
 }
 
 async function scrollToBottom() {
@@ -127,18 +126,40 @@ function handleSend(text = inputText.value) {
   inputText.value = ''
   isTyping.value = true
 
-  const delay = 900 + Math.random() * 500
-  window.setTimeout(() => {
-    const response = generateAIResponse(message)
-    messages.value.push({
-      id: aiId,
-      role: 'ai',
-      content: response.text,
-      tasks: response.tasks,
-      saved: false
-    })
+  if (!token.value) {
+    messages.value.push({ id: aiId, role: 'ai', content: 'Silakan login terlebih dahulu untuk menggunakan fitur AI.', tasks: [], saved: false })
     isTyping.value = false
-  }, delay)
+    return
+  }
+
+  ;(async () => {
+    try {
+      const payload = { userRequest: message }
+      const res = await apiRequest('/ai-generate', { method: 'POST', token: token.value, body: payload })
+
+      // API may wrap output differently depending on phase
+      const data = res.data || res
+      const output = (data.output) ? data.output : (data?.data?.output) ? data.data.output : data
+
+      const intent = output?.intent || output?.meta?.intent || ''
+
+      const humanMessage = output?.meta?.humanMessage || output?.meta?.refusalMessage || output?.meta?.refusalMessage
+
+      const tasks = mapOutputToTasks(output || {})
+
+      messages.value.push({
+        id: aiId,
+        role: 'ai',
+        content: humanMessage || (output?.meta?.refusalMessage ? output.meta.refusalMessage : (output?.userRequest ? `Oke, aku pahami rencanamu!` : 'Maaf, saya tidak dapat merespon.')),
+        tasks,
+        saved: false
+      })
+    } catch (err) {
+      messages.value.push({ id: aiId, role: 'ai', content: 'Maaf, terjadi kesalahan saat menghubungi layanan AI.', tasks: [], saved: false })
+    } finally {
+      isTyping.value = false
+    }
+  })()
 }
 
 function toggleTask(messageId, taskIndex) {

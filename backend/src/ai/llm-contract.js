@@ -16,6 +16,7 @@ const intentEnum = z.enum([
   "auto_schedule",
   "reschedule",
   "recommend",
+  "out_of_scope",
 ]);
 
 const recommendationTypeEnum = z.enum(["next_action", "productivity_tip", "reminder"]);
@@ -152,6 +153,8 @@ const llmOutputSchema = z
         confidence: z.number().min(0).max(1),
         needsUserConfirmation: z.boolean().default(false),
         assumptions: z.array(z.string().min(1)).default([]),
+        humanMessage: z.string().max(500).nullable().optional(),
+        refusalMessage: z.string().max(500).nullable().optional(),
       })
       .optional(),
   })
@@ -160,17 +163,20 @@ const llmOutputSchema = z
   .superRefine((value, context) => {
     const intent = value.intent;
 
-    // Semua intent kecuali recommend wajib punya mainTask.
-    if (!value.mainTask && intent !== "recommend") {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "mainTask is required for this intent",
-        path: ["mainTask"],
-      });
+    // Jika intent adalah out_of_scope, model boleh mengembalikan JSON penolakan minimal.
+    if (intent !== "out_of_scope") {
+      // Semua intent kecuali recommend wajib punya mainTask.
+      if (!value.mainTask && intent !== "recommend") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "mainTask is required for this intent",
+          path: ["mainTask"],
+        });
+      }
     }
 
     // Intent create/auto_schedule minimal punya satu subtask.
-    if ((intent === "create_task" || intent === "auto_schedule") && value.subtasks.length === 0) {
+    if (intent !== "out_of_scope" && (intent === "create_task" || intent === "auto_schedule") && value.subtasks.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "subtasks must contain at least one item for this intent",
@@ -179,7 +185,7 @@ const llmOutputSchema = z
     }
 
     // Intent terkait jadwal harus menyertakan constraints.
-    if ((intent === "create_task" || intent === "auto_schedule" || intent === "reschedule") && !value.schedulingConstraints) {
+    if (intent !== "out_of_scope" && (intent === "create_task" || intent === "auto_schedule" || intent === "reschedule") && !value.schedulingConstraints) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "schedulingConstraints is required for this intent",
@@ -188,7 +194,7 @@ const llmOutputSchema = z
     }
 
     // Create/auto_schedule wajib menghasilkan rencana jadwal.
-    if ((intent === "create_task" || intent === "auto_schedule") && value.schedulePlan.length === 0) {
+    if (intent !== "out_of_scope" && (intent === "create_task" || intent === "auto_schedule") && value.schedulePlan.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "schedulePlan is required for this intent",
@@ -197,7 +203,7 @@ const llmOutputSchema = z
     }
 
     // Reschedule wajib menjelaskan rencana perpindahan.
-    if (intent === "reschedule" && !value.reschedulePlan) {
+    if (intent !== "out_of_scope" && intent === "reschedule" && !value.reschedulePlan) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "reschedulePlan is required for reschedule intent",
@@ -206,7 +212,7 @@ const llmOutputSchema = z
     }
 
     // Recommend wajib berisi daftar rekomendasi.
-    if (intent === "recommend" && value.recommendations.length === 0) {
+    if (intent !== "out_of_scope" && intent === "recommend" && value.recommendations.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "recommendations is required for recommend intent",

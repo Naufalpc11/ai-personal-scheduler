@@ -33,7 +33,54 @@ npm install
 npm run dev
 ```
 
+## Troubleshooting
+
+### Port 3000 / 11434 Sudah Terpakai (EADDRINUSE Error)
+
+Jika ada error `Error: listen EADDRINUSE: address already in use :::3000`, berarti ada process lain yang sudah menggunakan port tersebut.
+
+**Solusi untuk Windows PowerShell:**
+
+```powershell
+# 1. Cari tahu siapa yang pakai port 3000
+netstat -ano | findstr :3000
+
+# Output contoh:
+#  TCP    0.0.0.0:3000           0.0.0.0:0              LISTENING       12345
+#  TCP    [::]:3000              [::]:0                 LISTENING       12345
+
+# Lihat PID (Process ID) di kolom paling kanan, misal 12345
+
+# 2. Kill process tersebut
+taskkill /PID 12345 /F
+
+# Output:
+# SUCCESS: The process with PID 12345 has been terminated.
+
+# 3. Tunggu 2 detik, lalu jalankan backend lagi
+Start-Sleep -Seconds 2
+npm run dev
+```
+
+**Untuk Ollama (port 11434):**
+
+Sama seperti di atas, tapi gunakan port 11434:
+
+```powershell
+# Cek siapa pakai port 11434
+netstat -ano | findstr :11434
+
+# Kill processnya
+taskkill /PID <PID> /F
+
+# Atau bisa langsung kill semua ollama process
+Get-Process | Where-Object {$_.ProcessName -like "*ollama*"} | Stop-Process -Force
+
+# Jalankan ollama lagi
+ollama serve
+```
+
 ## Catatan
 - Backend memakai Supabase Auth, jadi tabel `users` hanya menyimpan profil dan refer ke `auth.users`.
 - Semua akses dari frontend melewati backend API (server-side).
-- Endpoint AI sementara belum diaktifkan (akan diaktifkan di tahap berikutnya).
+- Endpoint AI sudah diaktifkan dan terhubung ke Ollama local (atau cloud provider sesuai `AI_PROVIDER_ORDER`).
