@@ -62,7 +62,17 @@ const throwProviderError = async (provider, response) => {
 };
 
 // Memanggil endpoint chat completion yang kompatibel dengan OpenAI.
-const callOpenAiCompatibleProvider = async ({ provider, baseUrl, apiKey, model, messages, temperature }) => {
+const callOpenAiCompatibleProvider = async ({
+  provider,
+  baseUrl,
+  apiKey,
+  model,
+  messages,
+  temperature,
+  keepAlive,
+  numCtx,
+  numPredict,
+}) => {
   const resolvedBaseUrl = normalizeBaseUrl(baseUrl, "/v1");
   if (!resolvedBaseUrl) {
     throw new AiProviderError(`Provider ${provider} is not configured`, {
@@ -82,6 +92,11 @@ const callOpenAiCompatibleProvider = async ({ provider, baseUrl, apiKey, model, 
       model,
       messages,
       temperature,
+      keep_alive: keepAlive || "30m",
+      options: {
+        num_ctx: numCtx || Number(process.env.OLLAMA_NUM_CTX || 2048),
+        num_predict: numPredict || Number(process.env.OLLAMA_NUM_PREDICT || 256),
+      },
       response_format: { type: "json_object" },
     }),
   });

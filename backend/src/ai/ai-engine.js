@@ -15,6 +15,9 @@ const providerConfigs = {
     baseUrl: normalizeBaseUrl(process.env.OLLAMA_BASE_URL || "http://localhost:11434", "/v1"),
     apiKey: process.env.OLLAMA_API_KEY,
     model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
+    keepAlive: process.env.OLLAMA_KEEP_ALIVE || "30m",
+    numCtx: Number(process.env.OLLAMA_NUM_CTX || 2048),
+    numPredict: Number(process.env.OLLAMA_NUM_PREDICT || 256),
   },
 };
 
@@ -185,6 +188,9 @@ const buildProviderConfig = (providerName, payload) => {
     apiKey: config.apiKey,
     model: config.model,
     temperature: payload.temperature ?? Number(process.env.AI_TEMPERATURE || 0.2),
+    keepAlive: config.keepAlive,
+    numCtx: config.numCtx,
+    numPredict: config.numPredict,
   };
 };
 

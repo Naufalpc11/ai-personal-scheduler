@@ -3,10 +3,10 @@ const aiService = require("../services/ai.service");
 const AppError = require("../utils/appError");
 
 const handleAiGenerate = asyncHandler(async (req, res) => {
-  const { userRequest } = req.body;
+  const { userRequest, taskId } = req.body;
   const userId = req.user.id;
 
-  const result = await aiService.generateAiResult(userRequest, userId);
+  const result = await aiService.generateAiResult(userRequest, userId, { taskId });
 
   res.status(200).json({
     success: true,

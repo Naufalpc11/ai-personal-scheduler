@@ -173,6 +173,7 @@ const aiProviderSchema = z.enum(["auto", "ollama"]);
 const aiGenerateSchema = z.object({
   body: z.object({
     userRequest: z.string().min(1),
+    taskId: z.coerce.number().int().positive().optional(),
     intent: z.enum(["create_task", "add_subtasks", "auto_schedule", "reschedule", "recommend"]).optional(),
     provider: aiProviderSchema.optional().default("auto"),
     locale: z.string().min(2).optional().default("id-ID"),
