@@ -14,7 +14,7 @@ const providerConfigs = {
     // Endpoint Ollama lokal (OpenAI-compatible) untuk model yang dijalankan di mesin sendiri.
     baseUrl: normalizeBaseUrl(process.env.OLLAMA_BASE_URL || "http://localhost:11434", "/v1"),
     apiKey: process.env.OLLAMA_API_KEY,
-    model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
+    model: process.env.OLLAMA_MODEL || "qwen2.5:1.5b",
   },
 };
 

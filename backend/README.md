@@ -24,7 +24,7 @@ AI_PROVIDER_ORDER="ollama"
 AI_TEMPERATURE=0.2
 OLLAMA_BASE_URL="http://localhost:11434"
 OLLAMA_API_KEY=""
-OLLAMA_MODEL="gpt-oss:20b"
+OLLAMA_MODEL="qwen2.5:1.5b"
 ```
 
 ## 3) Jalankan server
