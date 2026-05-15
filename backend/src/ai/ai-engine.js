@@ -124,7 +124,7 @@ const buildSystemPrompt = ({ providerName, intent, locale, timezone, context }) 
   3. 'subtasks' array MUST NOT BE EMPTY. Create at least one subtask.
   4. Keep 'fixedEvents' empty [] unless conflicting events are mentioned.
   5. GANTI "YYYY-MM-DD" dengan tanggal yang TEPAT. (Gunakan ${todayStr} jika user minta hari ini, atau ${tomorrowStr} jika user minta besok).
-  6. Format jam WAJIB HH:mm:ss+08:00 (Contoh jam 9 pagi: 09:00:00+08:00, jam 1 siang: 13:00:00+08:00).
+  6. GANTI "HH:mm:ss" dengan JAM YANG DIMINTA USER dalam format 24 JAM. (Contoh: "jam 9 pagi" = 09:00:00+08:00, "jam 1 siang" = 13:00:00+08:00). Format akhir WAJIB HH:mm:ss+08:00!
 
   EXPECTED JSON TEMPLATE (Copy this exact structure but FILL in the correct values):
   {
@@ -133,7 +133,7 @@ const buildSystemPrompt = ({ providerName, intent, locale, timezone, context }) 
     "mainTask": { "title": "...", "description": "...", "priority": "medium", "status": "pending" },
     "subtasks": [ { "title": "...", "notes": null, "order": 1, "estimatedMinutes": 60, "isFlexible": false } ],
     "schedulingConstraints": { "deadline": null, "preferredTimeWindows": [], "fixedEvents": [], "maxDailyFocusMinutes": 240, "allowWeekend": true },
-    "schedulePlan": [ { "subtaskTitle": "...", "startTime": "YYYY-MM-DDT09:00:00+08:00", "endTime": "YYYY-MM-DDT11:00:00+08:00", "date": "YYYY-MM-DDT09:00:00+08:00", "reason": "..." } ],
+    "schedulePlan": [ { "subtaskTitle": "...", "startTime": "YYYY-MM-DDTHH:mm:ss+08:00", "endTime": "YYYY-MM-DDTHH:mm:ss+08:00", "date": "YYYY-MM-DDTHH:mm:ss+08:00", "reason": "..." } ],
     "recommendations": [],
     "meta": { "model": "${providerName}", "generatedAt": "${now.toISOString()}", "confidence": 0.9, "needsUserConfirmation": false, "assumptions": [] }
   }`;
@@ -235,7 +235,19 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
   output.meta.assumptions = Array.isArray(output.meta.assumptions) ? output.meta.assumptions : [];
   output.subtasks = Array.isArray(output.subtasks) ? output.subtasks : [];
 
-// --- TAMBAHAN KODE ANTI-ZOD NGAMUK ---
+  // --- TAMBAHAN KODE ANTI-ZOD NGAMUK ---
+  
+  // 0. Kalau subtasks kosong (Zod butuh minimal 1), kita buatin otomatis biar nggak error!
+  if (output.subtasks.length === 0) {
+    output.subtasks.push({
+      title: output.mainTask?.title || "Aktivitas Utama",
+      notes: null,
+      order: 1,
+      estimatedMinutes: 60,
+      isFlexible: false
+    });
+  }
+
   // 1. Kalau AI ngasih angka 0 atau nggak ngisi, paksa jadi 30 menit!
   output.subtasks.forEach(st => {
     if (typeof st.estimatedMinutes !== 'number' || st.estimatedMinutes < 5) {
@@ -248,6 +260,22 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
     try { return iso ? new Date(iso).toISOString() : iso; } 
     catch(e) { return iso; }
   };
+
+  if (Array.isArray(output.schedulePlan)) {
+    output.schedulePlan.forEach(item => {
+      item.startTime = forceUTC(item.startTime);
+      item.endTime = forceUTC(item.endTime);
+      item.date = forceUTC(item.date);
+    });
+  }
+
+  // 3. Jaga-jaga kalau AI nulis timezone +08:00 di constraint
+  if (output.schedulingConstraints && Array.isArray(output.schedulingConstraints.preferredTimeWindows)) {
+    output.schedulingConstraints.preferredTimeWindows.forEach(tw => {
+      tw.start = forceUTC(tw.start);
+      tw.end = forceUTC(tw.end);
+    });
+  }
 
   if (Array.isArray(output.schedulePlan)) {
     output.schedulePlan.forEach(item => {
