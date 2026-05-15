@@ -106,6 +106,7 @@ const callOpenAiCompatibleProvider = async ({
   }
 
   const data = await response.json();
+  console.log("\n[OLLAMA RAW RESPONSE]", JSON.stringify(data, null, 2)); // buat ngecek respons dari Ollama, karena kadang errornya ada di format respons yang gak sesuai ekspektasi.
   const content = data?.choices?.[0]?.message?.content;
 
   return {
