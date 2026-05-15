@@ -1,5 +1,6 @@
 const AppError = require("../utils/appError");
 const { supabaseAdmin } = require("../supabase/client");
+const { normalizeSchedulePlan, normalizeDatetime } = require("../utils/validators");
 
 const mapSchedule = (row) => ({
   id: row.id,
@@ -43,13 +44,31 @@ const ensureTaskOwnership = async (userId, taskId) => {
 const createSchedule = async (userId, payload) => {
   await ensureTaskOwnership(userId, payload.taskId);
 
+  // Normalize times to fix 24:00 → next day 00:00
+  const normalizedStartTime = normalizeDatetime(payload.startTime);
+  const normalizedEndTime = normalizeDatetime(payload.endTime);
+
+  // If end is not after start, assume it belongs to the next day (cross-midnight)
+  let finalStart = normalizedStartTime;
+  let finalEnd = normalizedEndTime;
+  try {
+    const s = new Date(finalStart);
+    let e = new Date(finalEnd);
+    if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e.getTime() <= s.getTime()) {
+      e.setDate(e.getDate() + 1);
+      finalEnd = e.toISOString();
+    }
+  } catch (e) {
+    // ignore and keep original strings
+  }
+
   const { data, error } = await supabaseAdmin
     .from("schedules")
     .insert({
       task_id: payload.taskId,
       status: payload.status || "pending",
-      start_time: payload.startTime,
-      end_time: payload.endTime,
+      start_time: finalStart,
+      end_time: finalEnd,
       is_auto_scheduled: payload.isAutoScheduled ?? false,
       is_rescheduled: payload.isRescheduled ?? false,
       reschedule_reason: payload.rescheduleReason ?? null,
@@ -102,11 +121,25 @@ const updateSchedule = async (userId, scheduleId, payload) => {
   const updatePayload = {};
   if (payload.taskId !== undefined) updatePayload.task_id = payload.taskId;
   if (payload.status !== undefined) updatePayload.status = payload.status;
-  if (payload.startTime !== undefined) updatePayload.start_time = payload.startTime;
-  if (payload.endTime !== undefined) updatePayload.end_time = payload.endTime;
+  if (payload.startTime !== undefined) updatePayload.start_time = normalizeDatetime(payload.startTime);
+  if (payload.endTime !== undefined) updatePayload.end_time = normalizeDatetime(payload.endTime);
   if (payload.isAutoScheduled !== undefined) updatePayload.is_auto_scheduled = payload.isAutoScheduled;
   if (payload.isRescheduled !== undefined) updatePayload.is_rescheduled = payload.isRescheduled;
   if (payload.rescheduleReason !== undefined) updatePayload.reschedule_reason = payload.rescheduleReason;
+
+  // If both start_time and end_time are provided in updatePayload, ensure end is after start (cross-midnight adjust)
+  try {
+    if (updatePayload.start_time && updatePayload.end_time) {
+      const s = new Date(updatePayload.start_time);
+      let e = new Date(updatePayload.end_time);
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e.getTime() <= s.getTime()) {
+        e.setDate(e.getDate() + 1);
+        updatePayload.end_time = e.toISOString();
+      }
+    }
+  } catch (e) {
+    // ignore parsing errors
+  }
 
   const { data, error } = await supabaseAdmin
     .from("schedules")

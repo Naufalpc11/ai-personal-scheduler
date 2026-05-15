@@ -1,5 +1,65 @@
 const { z } = require("zod");
 
+/**
+ * Normalize ISO 8601 datetime strings by fixing invalid hour 24 to next day 00:00.
+ * Example: "2026-05-17T24:00:00+08:00" → "2026-05-18T00:00:00+08:00"
+ */
+const normalizeDatetime = (isoString) => {
+  if (!isoString || typeof isoString !== "string") {
+    return isoString;
+  }
+
+  const match = isoString.match(/^(\d{4}-\d{2}-\d{2})T24:(\d{2}:\d{2}(?:\.\d+)?)(.*)$/);
+  if (!match) {
+    return isoString;
+  }
+
+  const [, dateStr, timeWithoutHour, timezone] = match;
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + 1);
+  const nextDateStr = date.toISOString().split("T")[0];
+  return `${nextDateStr}T00:${timeWithoutHour}${timezone}`;
+};
+
+/**
+ * Normalize a schedule plan array by fixing any 24:00 times.
+ */
+const normalizeSchedulePlan = (schedulePlan) => {
+  if (!Array.isArray(schedulePlan)) {
+    return schedulePlan;
+  }
+
+  return schedulePlan.map((item) => {
+    const startTime = normalizeDatetime(item.startTime);
+    let endTime = normalizeDatetime(item.endTime);
+    const date = normalizeDatetime(item.date);
+
+    // If both times are parseable and endTime is not after startTime,
+    // assume the end is on the next day and add 1 day to endTime.
+    try {
+      if (startTime && endTime) {
+        const start = new Date(startTime);
+        const end = new Date(endTime);
+
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end.getTime() <= start.getTime()) {
+          const newEnd = new Date(end);
+          newEnd.setDate(newEnd.getDate() + 1);
+          endTime = newEnd.toISOString();
+        }
+      }
+    } catch (e) {
+      // ignore and return original strings if parsing fails
+    }
+
+    return {
+      ...item,
+      startTime,
+      endTime,
+      date,
+    };
+  });
+};
+
 const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
@@ -223,4 +283,6 @@ module.exports = {
   aiResultSchema,
   aiGenerateSchema,
   aiProviderSchema,
+  normalizeSchedulePlan,
+  normalizeDatetime,
 };

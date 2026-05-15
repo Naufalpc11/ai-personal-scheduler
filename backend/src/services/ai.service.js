@@ -1,87 +1,38 @@
-const AppError = require("../utils/appError");
+﻿const AppError = require("../utils/appError");
 const { generateAiPlan } = require("../ai/ai-engine");
 const { supabaseAdmin } = require("../supabase/client");
-
-const isGreeting = (text) => /^(halo|hai|hi|hello|pagi|siang|sore|malam)\b/i.test(text.trim());
-
-const isAssistantMetaQuestion = (text) =>
-  /(kamu\s+siapa|siapa\s+kamu|siapa\s+anda|bisa\s+apa|apa\s+yang\s+bisa\s+kamu|fitur|cara\s+pakai|gimana\s+pakainya|help|bantuan)/i.test(
-    text
-  );
-
-const hasSchedulingSignal = (text) =>
-  /(jadwal|schedule|reschedule|atur|deadline|task|tugas|meeting|kelas|kuliah|ujian|belajar|kerja|reminder|agenda|kalender|bentrok|konflik|jam\s+\d|besok|lusa|minggu\s+depan|hari\s+ini)/i.test(
-    text
-  );
-
-const isOutOfScopeQuestion = (text) =>
-  /(siapa\s+presiden|ibu\s+kota|harga\s+saham|skor\s+bola|berita\s+hari\s+ini|cuaca\s+hari\s+ini|resep\s+masakan|buat\s+kode|debug\s+kode|cerita\s+lucu|ramalan\s+zodiak)/i.test(
-    text
-  );
-
-const isShortProbe = (text) => text.trim().split(/\s+/).filter(Boolean).length <= 3;
+const { normalizeSchedulePlan } = require("../utils/validators");
 
 const buildFallbackOutput = (requestText) => {
   const nowIso = new Date().toISOString();
   const normalized = requestText.trim();
 
-  if (isOutOfScopeQuestion(normalized)) {
-    return {
-      version: "1.0",
-      intent: "out_of_scope",
-      userRequest: normalized,
-      locale: "id-ID",
-      timezone: "Asia/Jakarta",
-      subtasks: [],
-      estimatedDurationPerSubtask: [],
-      schedulePlan: [],
-      recommendations: [],
-      meta: {
-        model: "fallback-local",
-        generatedAt: nowIso,
-        confidence: 0.45,
-        needsUserConfirmation: false,
-        assumptions: ["User meminta topik di luar domain penjadwalan"],
-        refusalMessage:
-          "Maaf, saya fokus pada penjadwalan tugas. Saya bisa bantu menyusun jadwal, mengatur ulang, dan memberi rekomendasi waktu belajar/kerja.",
-      },
-    };
-  }
+  // If the user greets another person (e.g., "halo rafi"), return identity clarification.
+  const isGreetingToOther = /^(?:hi|halo|hai|hey)\s+\p{L}+$/iu.test(normalized) || /^(?:hi|halo|hai|hey)\b.*\b(to|untuk)\b.*\p{L}+$/iu.test(normalized);
 
-  let humanMessage = "Saya bisa bantu menyusun jadwal. Jelaskan aktivitasmu beserta waktu dan durasinya agar saya buatkan rencana yang pas.";
-  let assumptions = ["Butuh detail tambahan sebelum membuat jadwal final"];
-
-  if (isAssistantMetaQuestion(normalized)) {
-    humanMessage =
-      "Saya AI Scheduler, asisten untuk bantu atur tugas dan waktu kamu. Saya bisa bikin rencana harian, memecah tugas jadi subtask, dan menyusun jadwal yang realistis. Mau mulai dari aktivitas apa dulu?";
-    assumptions = ["User menanyakan identitas/kemampuan asisten"];
-  } else if (isGreeting(normalized)) {
-    humanMessage =
-      "Halo! Siap bantu urusan jadwalmu. Contoh: Besok jam 9 belajar AI 2 jam, lalu jam 1 meeting 1 jam. Nanti saya susun otomatis.";
-    assumptions = ["User membuka percakapan dengan sapaan"];
-  } else if (!hasSchedulingSignal(normalized) && isShortProbe(normalized)) {
-    humanMessage =
-      "Kalau kamu mau, saya bisa langsung bantu bikin jadwal. Cukup kirim aktivitas + waktu + durasi, misalnya: Hari ini jam 7 malam review materi 90 menit.";
-    assumptions = ["Pesan terlalu singkat dan belum mengandung detail penjadwalan"];
-  }
+  const refusalMessage = isGreetingToOther
+    ? "Aku AI Scheduler, bukan nama lain yang kamu sebut. Ada yang mau kamu atur jadwalnya?"
+    : "Mohon maaf, aku tidak dapat merespon pertanyaan di luar konteks penjadwalan. Aku adalah AI khusus untuk mengatur jadwal harianmu.";
 
   return {
     version: "1.0",
-    intent: "create_task",
+    intent: "out_of_scope",
     userRequest: normalized,
     locale: "id-ID",
     timezone: "Asia/Jakarta",
+    mainTask: null,
     subtasks: [],
     estimatedDurationPerSubtask: [],
+    schedulingConstraints: null,
     schedulePlan: [],
     recommendations: [],
     meta: {
       model: "fallback-local",
       generatedAt: nowIso,
-      confidence: 0.55,
-      needsUserConfirmation: true,
-      assumptions,
-      humanMessage,
+      confidence: 0.0,
+      needsUserConfirmation: false,
+      assumptions: ["LLM fallback digunakan karena respons model tidak valid"],
+      refusalMessage,
     },
   };
 };
@@ -98,11 +49,9 @@ const logAiInteraction = async ({ taskId, actionType, inputPrompt, aiResponse, m
 
     const { error } = await supabaseAdmin.from("ai_logs").insert(payload);
     if (error) {
-      // Logging failure should not break chat response flow.
       console.error("Failed to insert ai_logs:", error.message);
     }
   } catch (error) {
-    // Keep API resilient even if logging unexpectedly fails.
     console.error("Unexpected ai_logs insert error:", error.message);
   }
 };
@@ -114,32 +63,6 @@ const generateAiResult = async (userRequest, userId, options = {}) => {
 
   const requestText = userRequest.trim();
 
-  // Fast path: avoid expensive LLM call for greeting/meta/out-of-scope or very short probe.
-  if (
-    isGreeting(requestText) ||
-    isAssistantMetaQuestion(requestText) ||
-    isOutOfScopeQuestion(requestText) ||
-    (!hasSchedulingSignal(requestText) && isShortProbe(requestText))
-  ) {
-    const output = buildFallbackOutput(requestText);
-    const responsePayload = {
-      output,
-      provider: "fallback",
-      model: output.meta.model,
-      warning: "Fast path response applied",
-    };
-
-    await logAiInteraction({
-      taskId: options.taskId,
-      actionType: output.intent,
-      inputPrompt: requestText,
-      aiResponse: JSON.stringify(output),
-      modelUsed: output.meta.model,
-    });
-
-    return responsePayload;
-  }
-
   try {
     const result = await generateAiPlan({
       userRequest: requestText,
@@ -149,6 +72,10 @@ const generateAiResult = async (userRequest, userId, options = {}) => {
 
     if (!result.success) {
       throw new AppError("AI generation failed", 502);
+    }
+
+    if (result.data?.schedulePlan) {
+      result.data.schedulePlan = normalizeSchedulePlan(result.data.schedulePlan);
     }
 
     const responsePayload = {
@@ -167,7 +94,6 @@ const generateAiResult = async (userRequest, userId, options = {}) => {
 
     return responsePayload;
   } catch (error) {
-    // Fallback agar UI tetap mendapat respons user-facing saat model gagal parse/validasi.
     const fallback = buildFallbackOutput(requestText);
 
     await logAiInteraction({
