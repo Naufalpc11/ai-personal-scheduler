@@ -120,11 +120,14 @@ const buildSystemPrompt = ({ providerName, intent, locale, timezone, context }) 
 
   CRITICAL RULES:
   1. Return ONLY a single valid JSON object. DO NOT wrap it in markdown json blocks.
-  2. 'schedulingConstraints' MUST NOT be null.
-  3. 'subtasks' array MUST NOT BE EMPTY. Create at least one subtask.
-  4. Keep 'fixedEvents' empty [] unless conflicting events are mentioned.
-  5. GANTI "YYYY-MM-DD" dengan tanggal yang TEPAT. (Gunakan ${todayStr} jika user minta hari ini, atau ${tomorrowStr} jika user minta besok).
-  6. GANTI "HH:mm:ss" dengan JAM YANG DIMINTA USER dalam format 24 JAM. (Contoh: "jam 9 pagi" = 09:00:00+08:00, "jam 1 siang" = 13:00:00+08:00). Format akhir WAJIB HH:mm:ss+08:00!
+  2. Decide the intent by meaning, not by keyword matching. Read the user's request semantically.
+  3. If the request is about scheduling, planning, time management, task breakdown, rescheduling, or recommendations, keep it IN SCOPE.
+  4. If the request is not about scheduling/planning, set intent to out_of_scope and use a short refusal inside meta.refusalMessage.
+  5. Questions that are personal, religious, political, general knowledge, coding, or unrelated to scheduling are OUT OF SCOPE.
+  6. Ambiguous or very short requests that could still relate to planning should stay IN SCOPE and set meta.needsUserConfirmation=true with a clear meta.humanMessage.
+  7. Keep fixedEvents empty [] unless conflicting events are mentioned.
+  8. Use the correct date for today or tomorrow when the user explicitly mentions them.
+  9. Use 24-hour time and valid ISO 8601 with timezone offset. Never output invalid times like 24:00.
 
   EXPECTED JSON TEMPLATE (Copy this exact structure but FILL in the correct values):
   {
@@ -235,23 +238,30 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
   output.meta.assumptions = Array.isArray(output.meta.assumptions) ? output.meta.assumptions : [];
   output.subtasks = Array.isArray(output.subtasks) ? output.subtasks : [];
 
-  // --- TAMBAHAN KODE ANTI-ZOD NGAMUK ---
-  
-  // 0. Kalau subtasks kosong (Zod butuh minimal 1), kita buatin otomatis biar nggak error!
+  if (output.intent === "out_of_scope") {
+    output.mainTask = null;
+    output.subtasks = [];
+    output.estimatedDurationPerSubtask = Array.isArray(output.estimatedDurationPerSubtask) ? output.estimatedDurationPerSubtask : [];
+    output.schedulingConstraints = null;
+    output.schedulePlan = [];
+    output.recommendations = Array.isArray(output.recommendations) ? output.recommendations : [];
+    return output;
+  }
+
+  // Pastikan output in-scope tetap valid tanpa mengubah makna jawaban model.
   if (output.subtasks.length === 0) {
     output.subtasks.push({
       title: output.mainTask?.title || "Aktivitas Utama",
       notes: null,
       order: 1,
       estimatedMinutes: 60,
-      isFlexible: false
+      isFlexible: false,
     });
   }
 
-  // 1. Kalau AI ngasih angka 0 atau nggak ngisi, paksa jadi 30 menit!
-  output.subtasks.forEach(st => {
-    if (typeof st.estimatedMinutes !== 'number' || st.estimatedMinutes < 5) {
-      st.estimatedMinutes = 30; 
+  output.subtasks.forEach((st) => {
+    if (typeof st.estimatedMinutes !== "number" || st.estimatedMinutes < 5) {
+      st.estimatedMinutes = 30;
     }
   });
 
