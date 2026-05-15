@@ -13,8 +13,8 @@ useRequireAuth()
 const router = useRouter()
 const { tasks, addTask, deleteTask } = useAppStore()
 
-const TODAY = '2026-04-21'
-const TODAY_DATE = new Date('2026-04-21T00:00:00')
+const TODAY_DATE = new Date()
+const TODAY = `${TODAY_DATE.getFullYear()}-${String(TODAY_DATE.getMonth() + 1).padStart(2, '0')}-${String(TODAY_DATE.getDate()).padStart(2, '0')}`
 const DAY_NAMES_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 const COLORS = ['blue', 'purple', 'amber', 'green', 'red', 'pink']
 

@@ -14,11 +14,11 @@ useRequireAuth()
 const router = useRouter()
 const { user, tasks } = useAppStore()
 
-const TODAY = '2026-04-21'
+const nowObj = new Date()
+const TODAY = `${nowObj.getFullYear()}-${String(nowObj.getMonth() + 1).padStart(2, '0')}-${String(nowObj.getDate()).padStart(2, '0')}`
 
 function getNow() {
-  const date = new Date('2026-04-21T10:15:00')
-  return date
+  return new Date()
 }
 
 function timeToMinutes(hhmm) {

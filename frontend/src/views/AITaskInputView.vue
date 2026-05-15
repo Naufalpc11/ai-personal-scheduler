@@ -12,7 +12,9 @@ useRequireAuth()
 
 const { addTask } = useAppStore()
 
-const TODAY = '2026-04-21'
+const nowObj = new Date()
+const TODAY = `${nowObj.getFullYear()}-${String(nowObj.getMonth() + 1).padStart(2, '0')}-${String(nowObj.getDate()).padStart(2, '0')}`
+
 const EXAMPLE_PROMPTS = [
   'Besok jam 9 saya ada kelas AI selama 2 jam',
   'Senin depan meeting client dari pagi sampai siang',
@@ -77,11 +79,22 @@ function calcDurationText(startIso, endIso) {
   }
 }
 
+function mapIsoToDate(iso) {
+  try {
+    const d = new Date(iso)
+    // Ubah ke format YYYY-MM-DD sesuai standar kalender lu
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  } catch {
+    return TODAY
+  }
+}
+
 function mapOutputToTasks(output) {
   // Prefer schedulePlan
   if (Array.isArray(output.schedulePlan) && output.schedulePlan.length) {
     return output.schedulePlan.map((item) => ({
       title: item.subtaskTitle || item.reason || 'Task',
+      date: mapIsoToDate(item.date || item.startTime), // <--- INI KUNCI TANGGALNYA
       startTime: mapIsoToTime(item.startTime),
       endTime: mapIsoToTime(item.endTime),
       duration: calcDurationText(item.startTime, item.endTime),
@@ -95,6 +108,7 @@ function mapOutputToTasks(output) {
   if (Array.isArray(output.subtasks) && output.subtasks.length) {
     return output.subtasks.map((st, idx) => ({
       title: st.title || `Subtask ${idx + 1}`,
+      date: TODAY, // Fallback ke hari ini kalau AI nggak ngasih jadwal
       startTime: '09:00',
       endTime: '10:00',
       duration: '1 jam',
@@ -137,20 +151,46 @@ function handleSend(text = inputText.value) {
       const payload = { userRequest: message }
       const res = await apiRequest('/ai-generate', { method: 'POST', token: token.value, body: payload })
 
-      // API may wrap output differently depending on phase
-      const data = res.data || res
-      const output = (data.output) ? data.output : (data?.data?.output) ? data.data.output : data
+      // Kita pasang CCTV di sini biar ketahuan wujud asli datanya
+      console.log("=== RAW API RESPONSE ===", res);
 
-      const intent = output?.intent || output?.meta?.intent || ''
+      // Fungsi sakti versi paling brutal (handle string JSON & deep object)
+      function extractLLM(obj) {
+        if (!obj) return null;
+        // Kalau dari backend kekirim sebagai string, paksa parse jadi object!
+        if (typeof obj === 'string') {
+          try { obj = JSON.parse(obj); } catch(e) { return null; }
+        }
+        if (typeof obj !== 'object') return null;
+        
+        // Cari array schedulePlan atau subtasks
+        if (Array.isArray(obj.schedulePlan) || Array.isArray(obj.subtasks)) return obj;
+        
+        for (const key in obj) {
+          const found = extractLLM(obj[key]);
+          if (found) return found;
+        }
+        return null;
+      }
 
-      const humanMessage = output?.meta?.humanMessage || output?.meta?.refusalMessage || output?.meta?.refusalMessage
+      // Geledah datanya
+      const output = extractLLM(res) || {};
+      console.log("=== EXTRACTED LLM OUTPUT ===", output);
 
-      const tasks = mapOutputToTasks(output || {})
+      const intent = output?.intent || output?.meta?.intent || '';
+      const humanMessage = output?.meta?.humanMessage || output?.meta?.refusalMessage;
+      
+      const tasks = mapOutputToTasks(output);
+
+      // Logika pesan fallback yang lebih pintar
+      const fallbackMsg = tasks.length > 0 
+        ? 'Ini draf jadwal yang berhasil aku buat untukmu. Silakan simpan jika sudah pas!'
+        : 'Sip, apa aja nih aktivitas yang mau aku jadwalkan buat kamu hari ini?';
 
       messages.value.push({
         id: aiId,
         role: 'ai',
-        content: humanMessage || (output?.meta?.refusalMessage ? output.meta.refusalMessage : (output?.userRequest ? `Oke, aku pahami rencanamu!` : 'Maaf, saya tidak dapat merespon.')),
+        content: humanMessage || fallbackMsg,
         tasks,
         saved: false
       })
@@ -188,7 +228,7 @@ async function saveTasksFromMessage(messageId) {
     for (const task of selectedTasks) {
       await addTask({
         title: task.title,
-        date: TODAY,
+        date: task.date || TODAY, // <--- JANGAN DI-HARDCODE KE TODAY LAGI!
         startTime: task.startTime,
         endTime: task.endTime,
         duration: task.duration,
