@@ -14,7 +14,7 @@ const providerConfigs = {
     // Endpoint Ollama lokal (OpenAI-compatible) untuk model yang dijalankan di mesin sendiri.
     baseUrl: normalizeBaseUrl(process.env.OLLAMA_BASE_URL || "http://localhost:11434", "/v1"),
     apiKey: process.env.OLLAMA_API_KEY,
-    model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
+    model: process.env.OLLAMA_MODEL || "qwen2.5:1.5b",
     keepAlive: process.env.OLLAMA_KEEP_ALIVE || "30m",
     numCtx: Number(process.env.OLLAMA_NUM_CTX || 2048),
     numPredict: Number(process.env.OLLAMA_NUM_PREDICT || 256),
@@ -95,26 +95,48 @@ const resolveProviderOrder = ({ provider, intent, userRequest }) => {
 
 // Menambahkan kontrak dan konteks runtime ke system prompt.
 const buildSystemPrompt = ({ providerName, intent, locale, timezone, context }) => {
-  // Context block ini membantu model tetap patuh kontrak tanpa output naratif tambahan.
-  const contextBlock = JSON.stringify(
-    {
-      intent,
-      locale,
-      timezone,
-      context: context || {},
-      outputRules: [
-        "Return a single valid JSON object only.",
-        "Do not include markdown, code fences, or explanations.",
-        "Follow the scheduler contract exactly.",
-        "Use ISO 8601 date-time strings with timezone offsets.",
-      ],
-      providerHint: providerName,
-    },
-    null,
-    2
-  );
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
 
-  return `${contractPrompt.trim()}\n\nProvider: ${providerName}\n\nContract context:\n${contextBlock}`;
+  // Ambil tanggal dengan format rapi (YYYY-MM-DD)
+  const formatDate = (date) => {
+    const d = new Date(date.toLocaleString("en-US", { timeZone: timezone || "Asia/Makassar" }));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const todayStr = formatDate(now);
+  const tomorrowStr = formatDate(tomorrow);
+  const currentTime = now.toLocaleTimeString(locale || "id-ID", { timeZone: timezone || "Asia/Makassar", hour: '2-digit', minute:'2-digit' });
+
+  return `${contractPrompt.trim()}
+
+  Provider: ${providerName}
+
+  INFORMASI WAKTU PENTING (JANGAN SAMPAI SALAH):
+  - Jam Sekarang: ${currentTime}
+  - Tanggal HARI INI: ${todayStr}
+  - Tanggal BESOK: ${tomorrowStr}
+
+  CRITICAL RULES:
+  1. Return ONLY a single valid JSON object. DO NOT wrap it in markdown json blocks.
+  2. 'schedulingConstraints' MUST NOT be null.
+  3. 'subtasks' array MUST NOT BE EMPTY. Create at least one subtask.
+  4. Keep 'fixedEvents' empty [] unless conflicting events are mentioned.
+  5. GANTI "YYYY-MM-DD" dengan tanggal yang TEPAT. (Gunakan ${todayStr} jika user minta hari ini, atau ${tomorrowStr} jika user minta besok).
+  6. Format jam WAJIB HH:mm:ss+08:00 (Contoh jam 9 pagi: 09:00:00+08:00, jam 1 siang: 13:00:00+08:00).
+
+  EXPECTED JSON TEMPLATE (Copy this exact structure but FILL in the correct values):
+  {
+    "version": "1.0",
+    "intent": "${intent || 'create_task'}",
+    "mainTask": { "title": "...", "description": "...", "priority": "medium", "status": "pending" },
+    "subtasks": [ { "title": "...", "notes": null, "order": 1, "estimatedMinutes": 60, "isFlexible": false } ],
+    "schedulingConstraints": { "deadline": null, "preferredTimeWindows": [], "fixedEvents": [], "maxDailyFocusMinutes": 240, "allowWeekend": true },
+    "schedulePlan": [ { "subtaskTitle": "...", "startTime": "YYYY-MM-DDT09:00:00+08:00", "endTime": "YYYY-MM-DDT11:00:00+08:00", "date": "YYYY-MM-DDT09:00:00+08:00", "reason": "..." } ],
+    "recommendations": [],
+    "meta": { "model": "${providerName}", "generatedAt": "${now.toISOString()}", "confidence": 0.9, "needsUserConfirmation": false, "assumptions": [] }
+  }`;
 };
 
 // Menyerialkan konteks request pengguna ke JSON agar prompt konsisten.
@@ -212,6 +234,29 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
   output.meta.needsUserConfirmation = Boolean(output.meta.needsUserConfirmation);
   output.meta.assumptions = Array.isArray(output.meta.assumptions) ? output.meta.assumptions : [];
   output.subtasks = Array.isArray(output.subtasks) ? output.subtasks : [];
+
+// --- TAMBAHAN KODE ANTI-ZOD NGAMUK ---
+  // 1. Kalau AI ngasih angka 0 atau nggak ngisi, paksa jadi 30 menit!
+  output.subtasks.forEach(st => {
+    if (typeof st.estimatedMinutes !== 'number' || st.estimatedMinutes < 5) {
+      st.estimatedMinutes = 30; 
+    }
+  });
+
+  // 2. Convert offset waktu (+08:00) ke format UTC "Z" murni biar Zod nggak nolak!
+  const forceUTC = (iso) => {
+    try { return iso ? new Date(iso).toISOString() : iso; } 
+    catch(e) { return iso; }
+  };
+
+  if (Array.isArray(output.schedulePlan)) {
+    output.schedulePlan.forEach(item => {
+      item.startTime = forceUTC(item.startTime);
+      item.endTime = forceUTC(item.endTime);
+      item.date = forceUTC(item.date);
+    });
+  }
+
   output.estimatedDurationPerSubtask = Array.isArray(output.estimatedDurationPerSubtask)
     ? output.estimatedDurationPerSubtask
     : [];
@@ -240,7 +285,9 @@ const generateAiPlan = async (payload) => {
         temperature: payload.temperature ?? Number(process.env.AI_TEMPERATURE || 0.2),
       });
 
+      console.log("\n[LLM CONTENT STRING BEFORE PARSING]", response.content);
       const parsed = parseLlmJson(response.content || response.raw);
+      console.log("\n[LLM PARSED JSON]", JSON.stringify(parsed, null, 2));
       const validated = validateLlmOutput(
         normalizeOutput(parsed, response.model || providerName, intent, payload.userRequest)
       );
