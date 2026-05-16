@@ -225,6 +225,33 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
     output.meta = {};
   }
 
+  const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const getWeekday = (isoString) => {
+    try {
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) {
+        return "monday";
+      }
+
+      return dayNames[date.getDay()] || "monday";
+    } catch {
+      return "monday";
+    }
+  };
+
+  const extractTimeOnly = (isoString) => {
+    try {
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) {
+        return isoString;
+      }
+
+      return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    } catch {
+      return isoString;
+    }
+  };
+
   // Melengkapi field penting agar validasi kontrak tetap konsisten antar provider.
   output.version = output.version || "1.0";
   output.intent = output.intent || intent;
@@ -277,6 +304,23 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
       item.endTime = forceUTC(item.endTime);
       item.date = forceUTC(item.date);
     });
+  }
+
+  if (output.schedulingConstraints && Array.isArray(output.schedulingConstraints.preferredTimeWindows)) {
+    output.schedulingConstraints.preferredTimeWindows = output.schedulingConstraints.preferredTimeWindows
+      .map((windowItem) => {
+        if (windowItem && typeof windowItem === "object" && windowItem.day && windowItem.start && windowItem.end) {
+          return windowItem;
+        }
+
+        const sourceIso = output.schedulePlan?.[0]?.date || output.schedulePlan?.[0]?.startTime || output.meta.generatedAt;
+        return {
+          day: getWeekday(sourceIso),
+          start: extractTimeOnly(windowItem?.start || windowItem?.from || windowItem?.begin || "09:00"),
+          end: extractTimeOnly(windowItem?.end || windowItem?.to || windowItem?.finish || "11:00"),
+        };
+      })
+      .filter((windowItem) => windowItem && windowItem.day && windowItem.start && windowItem.end);
   }
 
   // 3. Jaga-jaga kalau AI nulis timezone +08:00 di constraint
