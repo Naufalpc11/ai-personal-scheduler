@@ -20,11 +20,10 @@ SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
 SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
 SUPABASE_SERVICE_ROLE_KEY="YOUR_SUPABASE_SERVICE_ROLE_KEY"
 
-AI_PROVIDER_ORDER="ollama"
+AI_PROVIDER_ORDER="gemini"
 AI_TEMPERATURE=0.2
-OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_API_KEY=""
-OLLAMA_MODEL="qwen2.5:1.5b"
+GEMINI_API_KEY="your_gemini_api_key"
+GEMINI_MODEL="gemini-2.0-flash"
 ```
 
 ## 3) Jalankan server
@@ -62,25 +61,11 @@ Start-Sleep -Seconds 2
 npm run dev
 ```
 
-**Untuk Ollama (port 11434):**
+**Untuk Gemini API:**
 
-Sama seperti di atas, tapi gunakan port 11434:
-
-```powershell
-# Cek siapa pakai port 11434
-netstat -ano | findstr :11434
-
-# Kill processnya
-taskkill /PID <PID> /F
-
-# Atau bisa langsung kill semua ollama process
-Get-Process | Where-Object {$_.ProcessName -like "*ollama*"} | Stop-Process -Force
-
-# Jalankan ollama lagi
-ollama serve
-```
+Tidak ada server lokal yang perlu dijalankan. Cukup pastikan `GEMINI_API_KEY` terisi dan backend punya akses internet.
 
 ## Catatan
 - Backend memakai Supabase Auth, jadi tabel `users` hanya menyimpan profil dan refer ke `auth.users`.
 - Semua akses dari frontend melewati backend API (server-side).
-- Endpoint AI sudah diaktifkan dan terhubung ke Ollama local (atau cloud provider sesuai `AI_PROVIDER_ORDER`).
+- Endpoint AI sudah diaktifkan dan terhubung ke Gemini cloud (atau provider sesuai `AI_PROVIDER_ORDER`).

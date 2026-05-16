@@ -410,13 +410,15 @@ Contoh invalid #3:
 - AI mengembalikan narasi teks + JSON campur.
 - top-level field wajib (`mainTask`) tidak ada.
 
-## 9) Prompt Compliance Rule untuk Ollama
+## 9) Prompt Compliance Rule untuk Gemini
 
 Agar model konsisten ke kontrak ini, prompt sistem wajib menegaskan:
 - Return only valid JSON.
 - Do not include markdown code fences.
 - Follow enum and field names exactly.
 - If uncertain, fill `meta.assumptions` and set `meta.needsUserConfirmation = true`.
+
+Untuk AI Studio, pakai prompt sistem yang sama dengan file [backend/src/ai/prompts/gemini-system-contract.txt](backend/src/ai/prompts/gemini-system-contract.txt), lalu tes beberapa input sederhana seperti jadwal belajar, reschedule, dan pertanyaan di luar scope.
 
 Dengan kontrak ini, backend bisa melakukan alur aman:
 1. Parse JSON.

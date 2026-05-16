@@ -149,16 +149,16 @@ Authorization: Bearer <token>
 ### AI Execute
 - `POST /api/ai-execute`
 
-Endpoint ini mencoba provider sesuai urutan `AI_PROVIDER_ORDER`. Pada konfigurasi saat ini, project dijalankan dalam mode `Ollama-only`.
+Endpoint ini mencoba provider sesuai urutan `AI_PROVIDER_ORDER`. Pada konfigurasi saat ini, project dijalankan dalam mode `Gemini-only`.
 
 `/api/ai-generate` hanya mengembalikan output AI yang sudah divalidasi. `/api/ai-execute` menjalankan generate lalu langsung menyimpan hasil ke database.
 
 Contoh ENV yang dipakai:
 
 ```env
-AI_PROVIDER_ORDER="ollama"
-OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_MODEL="qwen2.5:1.5b"
+AI_PROVIDER_ORDER="gemini"
+GEMINI_API_KEY="your_gemini_api_key"
+GEMINI_MODEL="gemini-2.0-flash"
 ```
 
 Tes awal paling aman:

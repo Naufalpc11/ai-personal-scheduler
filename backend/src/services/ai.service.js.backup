@@ -144,7 +144,7 @@ const generateAiResult = async (userRequest, userId, options = {}) => {
   try {
     const result = await generateAiPlan({
       userRequest: requestText,
-      provider: "ollama",
+      provider: "gemini",
       temperature: Number(process.env.AI_TEMPERATURE || 0.2),
     });
 

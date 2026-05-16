@@ -1,16 +1,14 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { Bot, CalendarPlus, CheckCircle2, Clock, RotateCcw, Send, Sparkles, User } from 'lucide-vue-next'
+import { Bot, CheckCircle2, Clock, RotateCcw, Send, Sparkles, User } from 'lucide-vue-next'
 import MainLayout from '@/components/layout/MainLayout.vue'
-import AppBadge from '@/components/ui/AppBadge.vue'
-import AppButton from '@/components/ui/AppButton.vue'
 import { useAppStore } from '@/composables/useAppStore'
-import { apiRequest } from '@/utils/api'
 import { useRequireAuth } from '@/composables/useRequireAuth'
+import { apiRequest } from '@/utils/api'
 
 useRequireAuth()
 
-const { addTask } = useAppStore()
+const { token } = useAppStore()
 
 const nowObj = new Date()
 const TODAY = `${nowObj.getFullYear()}-${String(nowObj.getMonth() + 1).padStart(2, '0')}-${String(nowObj.getDate()).padStart(2, '0')}`
@@ -26,21 +24,19 @@ const messages = ref([
   {
     id: 1,
     role: 'ai',
-    content: 'Halo! 👋 Saya AI Scheduler.\n\nCeritakan rencanamu - meeting, kelas, belajar, atau kegiatan apapun - dan saya akan otomatis membuat jadwal yang optimal untukmu!\n\nApa rencanamu hari ini?',
+    content: 'Halo! 👋 Saya AI Scheduler.\n\nCeritakan rencanamu — meeting, kelas, belajar, atau kegiatan lain — dan saya akan langsung bantu buat jadwalnya.\n\nApa rencanamu hari ini?',
     tasks: [],
     saved: false
   }
 ])
 const inputText = ref('')
 const isTyping = ref(false)
-const isSaving = ref(false)
 const error = ref('')
 const nextId = ref(2)
 const scrollAnchor = ref(null)
 const inputRef = ref(null)
 
 const hasOnlyIntro = computed(() => messages.value.length === 1 && !isTyping.value)
-
 const suggestionText = computed(() => 'Coba tanya:')
 
 const categoryColors = {
@@ -52,14 +48,10 @@ const categoryColors = {
   Lainnya: 'bg-gray-100 text-gray-600'
 }
 
-const { token } = useAppStore()
-
 function mapIsoToTime(iso) {
   if (typeof iso === 'string') {
     const match = iso.match(/T(\d{2}):(\d{2})/)
-    if (match) {
-      return `${match[1]}:${match[2]}`
-    }
+    if (match) return `${match[1]}:${match[2]}`
   }
 
   try {
@@ -76,11 +68,11 @@ function calcDurationText(startIso, endIso) {
     const e = new Date(endIso)
     const diff = Math.round((e - s) / 60000)
     if (diff <= 0) return '0 menit'
-    const h = Math.floor(diff / 60)
-    const m = diff % 60
-    if (h && m) return `${h} jam ${m} menit`
-    if (h) return `${h} jam`
-    return `${m} menit`
+    const hours = Math.floor(diff / 60)
+    const minutes = diff % 60
+    if (hours && minutes) return `${hours} jam ${minutes} menit`
+    if (hours) return `${hours} jam`
+    return `${minutes} menit`
   } catch {
     return '-'
   }
@@ -89,14 +81,11 @@ function calcDurationText(startIso, endIso) {
 function mapIsoToDate(iso) {
   if (typeof iso === 'string') {
     const match = iso.match(/^(\d{4}-\d{2}-\d{2})T/)
-    if (match) {
-      return match[1]
-    }
+    if (match) return match[1]
   }
 
   try {
     const d = new Date(iso)
-    // Ubah ke format YYYY-MM-DD sesuai standar kalender lu
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   } catch {
     return TODAY
@@ -104,11 +93,10 @@ function mapIsoToDate(iso) {
 }
 
 function mapOutputToTasks(output) {
-  // Prefer schedulePlan
   if (Array.isArray(output.schedulePlan) && output.schedulePlan.length) {
     return output.schedulePlan.map((item) => ({
       title: item.subtaskTitle || item.reason || 'Task',
-      date: mapIsoToDate(item.date || item.startTime), // <--- INI KUNCI TANGGALNYA
+      date: mapIsoToDate(item.date || item.startTime),
       startTime: mapIsoToTime(item.startTime),
       endTime: mapIsoToTime(item.endTime),
       duration: calcDurationText(item.startTime, item.endTime),
@@ -118,17 +106,16 @@ function mapOutputToTasks(output) {
     }))
   }
 
-  // Fallback to subtasks with no times
   if (Array.isArray(output.subtasks) && output.subtasks.length) {
     return output.subtasks.map((st, idx) => ({
       title: st.title || `Subtask ${idx + 1}`,
-      date: TODAY, // Fallback ke hari ini kalau AI nggak ngasih jadwal
+      date: TODAY,
       startTime: '09:00',
       endTime: '10:00',
       duration: '1 jam',
       category: 'Lainnya',
       color: 'amber',
-      selected: idx === 0
+      selected: true
     }))
   }
 
@@ -142,6 +129,27 @@ async function scrollToBottom() {
 
 watch(messages, scrollToBottom, { deep: true })
 watch(isTyping, scrollToBottom)
+
+function extractLLM(obj) {
+  if (!obj) return null
+  if (typeof obj === 'string') {
+    try {
+      obj = JSON.parse(obj)
+    } catch {
+      return null
+    }
+  }
+
+  if (typeof obj !== 'object') return null
+  if (Array.isArray(obj.schedulePlan) || Array.isArray(obj.subtasks)) return obj
+
+  for (const key in obj) {
+    const found = extractLLM(obj[key])
+    if (found) return found
+  }
+
+  return null
+}
 
 function handleSend(text = inputText.value) {
   const message = text.trim()
@@ -164,115 +172,41 @@ function handleSend(text = inputText.value) {
 
   ;(async () => {
     try {
-      const payload = { userRequest: message }
-      const res = await apiRequest('/ai-generate', { method: 'POST', token: token.value, body: payload })
+      const res = await apiRequest('/ai-execute', {
+        method: 'POST',
+        token: token.value,
+        body: { userRequest: message }
+      })
 
-      // Kita pasang CCTV di sini biar ketahuan wujud asli datanya
-      console.log("=== RAW API RESPONSE ===", res);
+      console.log('=== RAW API RESPONSE ===', res)
 
-      // Fungsi sakti versi paling brutal (handle string JSON & deep object)
-      function extractLLM(obj) {
-        if (!obj) return null;
-        // Kalau dari backend kekirim sebagai string, paksa parse jadi object!
-        if (typeof obj === 'string') {
-          try { obj = JSON.parse(obj); } catch(e) { return null; }
-        }
-        if (typeof obj !== 'object') return null;
-        
-        // Cari array schedulePlan atau subtasks
-        if (Array.isArray(obj.schedulePlan) || Array.isArray(obj.subtasks)) return obj;
-        
-        for (const key in obj) {
-          const found = extractLLM(obj[key]);
-          if (found) return found;
-        }
-        return null;
-      }
+      const output = extractLLM(res?.data?.ai?.output || res?.data?.output || res) || {}
+      console.log('=== EXTRACTED LLM OUTPUT ===', output)
 
-      // Geledah datanya
-      const output = extractLLM(res) || {};
-      console.log("=== EXTRACTED LLM OUTPUT ===", output);
-
-      const intent = output?.intent || output?.meta?.intent || '';
-      const humanMessage = output?.meta?.humanMessage || output?.meta?.refusalMessage;
-      
-      const tasks = mapOutputToTasks(output);
-
-      // Logika pesan fallback yang lebih pintar
-      const fallbackMsg = tasks.length > 0 
-        ? 'Ini draf jadwal yang berhasil aku buat untukmu. Silakan simpan jika sudah pas!'
-        : 'Sip, apa aja nih aktivitas yang mau aku jadwalkan buat kamu hari ini?';
+      const tasks = mapOutputToTasks(output)
+      const humanMessage = output?.meta?.humanMessage || output?.meta?.refusalMessage
+      const isRefusal = output?.intent === 'out_of_scope'
 
       messages.value.push({
         id: aiId,
         role: 'ai',
-        content: humanMessage || fallbackMsg,
+        content: humanMessage || (tasks.length > 0 ? 'Jadwalnya sudah aku simpan ke database.' : 'Sip, apa aja nih aktivitas yang mau aku jadwalkan buat kamu hari ini?'),
         tasks,
-        saved: false
+        saved: tasks.length > 0 && !isRefusal
       })
     } catch (err) {
-      messages.value.push({ id: aiId, role: 'ai', content: 'Maaf, terjadi kesalahan saat menghubungi layanan AI.', tasks: [], saved: false })
+      error.value = err?.message || 'Gagal menghubungi layanan AI.'
+      messages.value.push({
+        id: aiId,
+        role: 'ai',
+        content: 'Maaf, terjadi kesalahan saat menghubungi layanan AI.',
+        tasks: [],
+        saved: false
+      })
     } finally {
       isTyping.value = false
     }
   })()
-}
-
-function toggleTask(messageId, taskIndex) {
-  messages.value = messages.value.map((message) => {
-    if (message.id !== messageId || !message.tasks) return message
-
-    return {
-      ...message,
-      tasks: message.tasks.map((task, index) => (
-        index === taskIndex ? { ...task, selected: !task.selected } : task
-      ))
-    }
-  })
-}
-
-async function saveTasksFromMessage(messageId) {
-  const message = messages.value.find((item) => item.id === messageId)
-  if (!message?.tasks) return
-
-  const selectedTasks = message.tasks.filter((task) => task.selected)
-  if (!selectedTasks.length) return
-  error.value = ''
-  isSaving.value = true
-
-  try {
-    for (const task of selectedTasks) {
-      await addTask({
-        title: task.title,
-        date: task.date || TODAY, // <--- JANGAN DI-HARDCODE KE TODAY LAGI!
-        startTime: task.startTime,
-        endTime: task.endTime,
-        duration: task.duration,
-        category: task.category,
-        color: task.color,
-        description: 'Dibuat oleh AI Scheduler'
-      })
-    }
-  } catch (err) {
-    error.value = err?.message || 'Gagal menyimpan task AI.'
-    isSaving.value = false
-    return
-  }
-
-  messages.value = messages.value.map((item) => (
-    item.id === messageId ? { ...item, saved: true } : item
-  ))
-
-  window.setTimeout(() => {
-    messages.value.push({
-      id: nextId.value++,
-      role: 'ai',
-      content: `✅ Berhasil! **${selectedTasks.length} task** telah ditambahkan ke jadwalmu.\n\nApakah ada rencana lain yang ingin saya bantu susun jadwalnya?`,
-      tasks: [],
-      saved: false
-    })
-  }, 250)
-  isSaving.value = false
 }
 
 function handleReset() {
@@ -280,7 +214,7 @@ function handleReset() {
     {
       id: 1,
       role: 'ai',
-      content: 'Halo! 👋 Saya AI Scheduler.\n\nCeritakan rencanamu - meeting, kelas, belajar, atau kegiatan apapun - dan saya akan otomatis membuat jadwal yang optimal untukmu!\n\nApa rencanamu hari ini?',
+      content: 'Halo! 👋 Saya AI Scheduler.\n\nCeritakan rencanamu — meeting, kelas, belajar, atau kegiatan lain — dan saya akan langsung bantu buat jadwalnya.\n\nApa rencanamu hari ini?',
       tasks: [],
       saved: false
     }
@@ -289,10 +223,6 @@ function handleReset() {
   isTyping.value = false
   nextId.value = 2
   inputRef.value?.focus()
-}
-
-function canSave(message) {
-  return Boolean(message.tasks?.some((task) => task.selected)) && !message.saved
 }
 </script>
 
@@ -340,21 +270,14 @@ function canSave(message) {
                 <div
                   v-for="(task, index) in message.tasks"
                   :key="index"
-                  class="flex items-center gap-3 rounded-xl border p-3 transition-all"
-                  :class="[
-                    message.saved ? 'cursor-default border-gray-100 bg-white opacity-75' : task.selected ? 'cursor-pointer border-blue-200 bg-blue-50 hover:bg-blue-100' : 'cursor-pointer border-gray-100 bg-white hover:bg-gray-50'
-                  ]"
-                  @click="!message.saved && toggleTask(message.id, index)"
+                  class="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm"
                 >
-                  <div v-if="!message.saved" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2" :class="task.selected ? 'border-transparent bg-blue-500' : 'border-gray-300'">
-                    <CheckCircle2 v-if="task.selected" class="h-3.5 w-3.5 text-white" />
-                  </div>
-                  <div v-else class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500">
+                  <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500">
                     <CheckCircle2 class="h-3.5 w-3.5 text-white" />
                   </div>
 
                   <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-medium" :class="task.selected || message.saved ? 'text-gray-900' : 'text-gray-500'">{{ task.title }}</p>
+                    <p class="truncate text-sm font-medium text-gray-900">{{ task.title }}</p>
                     <div class="mt-0.5 flex items-center gap-1.5">
                       <Clock class="h-3 w-3 text-gray-400" />
                       <span class="text-xs text-gray-400">{{ task.startTime }} – {{ task.endTime }} · {{ task.duration }}</span>
@@ -364,22 +287,7 @@ function canSave(message) {
                   <span class="shrink-0 rounded-lg px-2 py-0.5 text-xs font-medium" :class="categoryColors[task.category] ?? 'bg-gray-100 text-gray-600'">{{ task.category }}</span>
                 </div>
 
-                <button
-                  v-if="!message.saved"
-                  class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
-                  type="button"
-                  :disabled="!canSave(message) || isSaving"
-                  @click="saveTasksFromMessage(message.id)"
-                >
-                  <CalendarPlus v-if="!isSaving" class="h-4 w-4" />
-                  <span v-if="!isSaving">Simpan ke Jadwal ({{ message.tasks?.filter((task) => task.selected).length ?? 0 }} task)</span>
-                  <span v-else class="inline-flex items-center gap-2">
-                    <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Menyimpan...
-                  </span>
-                </button>
-
-                <div v-else class="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 py-2 text-sm font-medium text-emerald-600">
+                <div class="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 py-2 text-sm font-medium text-emerald-600">
                   <CheckCircle2 class="h-4 w-4" />
                   Tersimpan ke jadwal!
                 </div>
@@ -436,7 +344,7 @@ function canSave(message) {
             <Send class="h-4 w-4" />
           </button>
         </div>
-        <p class="mt-2 text-center text-xs text-gray-300">AI ini menggunakan simulasi • Tekan Enter untuk kirim</p>
+        <p class="mt-2 text-center text-xs text-gray-300">AI kini langsung memakai backend Gemini dan menyimpan jadwal otomatis.</p>
       </div>
     </div>
   </MainLayout>

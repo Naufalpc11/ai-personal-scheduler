@@ -2,29 +2,27 @@ const fs = require("fs");
 const path = require("path");
 const AppError = require("../utils/appError");
 const { parseLlmJson, validateLlmOutput } = require("./llm-contract");
-const { AiProviderError, createProviderRunner, normalizeBaseUrl } = require("./providers");
+const { AiProviderError, createProviderRunner } = require("./providers");
 
 // Memuat prompt kontrak sebagai instruksi dasar untuk seluruh provider.
-const contractPromptPath = path.join(__dirname, "prompts", "ollama-system-contract.txt");
+const contractPromptPath = path.join(__dirname, "prompts", "gemini-system-contract.txt");
 const contractPrompt = fs.readFileSync(contractPromptPath, "utf8");
 
 // Konfigurasi provider cloud yang aktif untuk proses generate AI.
 const providerConfigs = {
-  ollama: {
-    // Endpoint Ollama lokal (OpenAI-compatible) untuk model yang dijalankan di mesin sendiri.
-    baseUrl: normalizeBaseUrl(process.env.OLLAMA_BASE_URL || "http://localhost:11434", "/v1"),
-    apiKey: process.env.OLLAMA_API_KEY,
-    model: process.env.OLLAMA_MODEL || "qwen2.5:1.5b",
-    keepAlive: process.env.OLLAMA_KEEP_ALIVE || "30m",
-    numCtx: Number(process.env.OLLAMA_NUM_CTX || 2048),
-    numPredict: Number(process.env.OLLAMA_NUM_PREDICT || 256),
+  gemini: {
+    // Gemini API dari AI Studio untuk model cloud yang langsung siap pakai.
+    baseUrl: (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta").trim().replace(/\/$/, ""),
+    apiKey: process.env.GEMINI_API_KEY,
+    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+    responseMimeType: process.env.GEMINI_RESPONSE_MIME_TYPE || "application/json",
   },
 };
 
 // Menyusun urutan provider dari ENV dan menghapus duplikasi.
 const defaultProviderOrder = (preferredProvider) => {
   // Urutan default fallback bisa diatur lewat ENV.
-  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "ollama")
+  const configuredOrder = (process.env.AI_PROVIDER_ORDER || "gemini")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -76,8 +74,8 @@ const resolveProviderOrder = ({ provider, intent, userRequest }) => {
     provider && provider !== "auto"
       ? [provider, ...defaultProviderOrder(provider)]
       : (() => {
-          // Mode auto di project ini dipaksa hanya lewat Ollama.
-          return ["ollama"];
+          // Mode auto di project ini dipaksa hanya lewat Gemini.
+          return ["gemini"];
         })();
 
   const uniqueProviders = [];
@@ -212,10 +210,8 @@ const buildProviderConfig = (providerName, payload) => {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     model: config.model,
+    responseMimeType: config.responseMimeType,
     temperature: payload.temperature ?? Number(process.env.AI_TEMPERATURE || 0.2),
-    keepAlive: config.keepAlive,
-    numCtx: config.numCtx,
-    numPredict: config.numPredict,
   };
 };
 
