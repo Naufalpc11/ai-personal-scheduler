@@ -10,6 +10,26 @@ class AiProviderError extends Error {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const parseRetryAfterMs = (retryAfterHeader) => {
+  if (!retryAfterHeader) {
+    return null;
+  }
+
+  const numericValue = Number(retryAfterHeader);
+  if (!Number.isNaN(numericValue) && numericValue >= 0) {
+    return Math.round(numericValue * 1000);
+  }
+
+  const retryAt = Date.parse(retryAfterHeader);
+  if (Number.isNaN(retryAt)) {
+    return null;
+  }
+
+  return Math.max(0, retryAt - Date.now());
+};
+
 // Menormalkan base URL dan menambahkan suffix bila diperlukan (contoh: /v1).
 const normalizeBaseUrl = (value, suffix) => {
   const baseUrl = (value || "").trim().replace(/\/$/, "");
@@ -100,28 +120,49 @@ const callGeminiProvider = async ({
 
   const systemMessage = messages?.find((message) => message?.role === "system")?.content || "";
   const contents = toGeminiContents(messages);
+  const maxRetries = Number.parseInt(process.env.GEMINI_MAX_RETRIES || "2", 10);
+  const retryBaseMs = Number.parseInt(process.env.GEMINI_RETRY_BASE_MS || "700", 10);
+  const requestUrl = `${resolvedBaseUrl}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  const response = await fetch(`${resolvedBaseUrl}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      systemInstruction: systemMessage
-        ? {
-            parts: [{ text: systemMessage }],
-          }
-        : undefined,
-      contents,
-      generationConfig: {
-        temperature,
-        responseMimeType: responseMimeType || "application/json",
+  let response;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    response = await fetch(requestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        systemInstruction: systemMessage
+          ? {
+              parts: [{ text: systemMessage }],
+            }
+          : undefined,
+        contents,
+        generationConfig: {
+          temperature,
+          responseMimeType: responseMimeType || "application/json",
+        },
+      }),
+    });
 
-  if (!response.ok) {
-    await throwProviderError(provider, response);
+    if (response.ok) {
+      break;
+    }
+
+    const canRetry = response.status === 429 || response.status >= 500;
+    if (!canRetry || attempt === maxRetries) {
+      await throwProviderError(provider, response);
+    }
+
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+    const exponentialBackoffMs = retryBaseMs * (2 ** attempt);
+    const jitterMs = Math.floor(Math.random() * 200);
+    const waitMs = Math.max(retryAfterMs ?? 0, exponentialBackoffMs + jitterMs);
+
+    console.warn(
+      `[GEMINI RETRY] attempt ${attempt + 1}/${maxRetries + 1}, status=${response.status}, wait=${waitMs}ms`
+    );
+    await sleep(waitMs);
   }
 
   const data = await response.json();

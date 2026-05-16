@@ -8,9 +8,19 @@ const { protect } = require("../middleware/auth.middleware");
 const router = express.Router();
 
 router.use(authRoutes);
+
+// Dev mode: allow mounting AI routes before auth when DISABLE_AUTH=true
+// This is only for local testing. Do NOT enable in production.
+if (process.env.DISABLE_AUTH === "true") {
+	router.use(aiRoutes);
+}
+
 router.use(protect);
 router.use(taskRoutes);
 router.use(scheduleRoutes);
-router.use(aiRoutes);
+
+if (process.env.DISABLE_AUTH !== "true") {
+	router.use(aiRoutes);
+}
 
 module.exports = router;

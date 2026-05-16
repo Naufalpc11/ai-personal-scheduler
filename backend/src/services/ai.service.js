@@ -309,6 +309,66 @@ const generateAiResult = async (userRequest, userId, options = {}) => {
 
     return responsePayload;
   } catch (error) {
+    // If provider failed (rate limit, quota, etc.) but the user's request
+    // clearly looks like scheduling, apply heuristic rescue so devs/users
+    // can still test/save schedules locally.
+    if (SCHEDULING_KEYWORDS.test(requestText)) {
+      const rescued = buildRescuedScheduleOutput(requestText);
+
+      await logAiInteraction({
+        taskId: options.taskId,
+        actionType: rescued.intent,
+        inputPrompt: requestText,
+        aiResponse: JSON.stringify(rescued),
+        modelUsed: rescued.meta.model,
+      });
+
+      return {
+        output: rescued,
+        provider: "heuristic-rescue",
+        model: rescued.meta.model,
+        warning: error?.message || "LLM provider failed — heuristic rescue applied",
+      };
+    }
+
+    if (MEDICAL_KEYWORDS.test(requestText)) {
+      const clarified = buildClarificationOutput(requestText, "medical");
+
+      await logAiInteraction({
+        taskId: options.taskId,
+        actionType: clarified.intent,
+        inputPrompt: requestText,
+        aiResponse: JSON.stringify(clarified),
+        modelUsed: clarified.meta.model,
+      });
+
+      return {
+        output: clarified,
+        provider: "heuristic-clarifier",
+        model: clarified.meta.model,
+        warning: error?.message || "LLM provider failed — clarification applied",
+      };
+    }
+
+    if (GREETING_ONLY.test(requestText)) {
+      const clarified = buildClarificationOutput(requestText, "greeting");
+
+      await logAiInteraction({
+        taskId: options.taskId,
+        actionType: clarified.intent,
+        inputPrompt: requestText,
+        aiResponse: JSON.stringify(clarified),
+        modelUsed: clarified.meta.model,
+      });
+
+      return {
+        output: clarified,
+        provider: "heuristic-clarifier",
+        model: clarified.meta.model,
+        warning: error?.message || "LLM provider failed — clarification applied",
+      };
+    }
+
     const fallback = buildFallbackOutput(requestText);
 
     await logAiInteraction({

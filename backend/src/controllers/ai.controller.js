@@ -1,10 +1,44 @@
 const asyncHandler = require("../utils/asyncHandler");
 const aiService = require("../services/ai.service");
 const AppError = require("../utils/appError");
+const { supabaseAdmin } = require("../supabase/client");
+
+const resolveUserId = async (req) => {
+  if (req.user?.id) {
+    return req.user.id;
+  }
+
+  if (process.env.DISABLE_AUTH !== "true") {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  if (process.env.DEV_USER_ID) {
+    return process.env.DEV_USER_ID;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (error) {
+    throw new AppError(`Failed to resolve dev user: ${error.message}`, 500);
+  }
+
+  if (!Array.isArray(data) || data.length === 0 || !data[0]?.id) {
+    throw new AppError(
+      "No user found for dev auth bypass. Create/login a user first or set DEV_USER_ID in .env",
+      400
+    );
+  }
+
+  return data[0].id;
+};
 
 const handleAiGenerate = asyncHandler(async (req, res) => {
   const { userRequest, taskId } = req.body;
-  const userId = req.user.id;
+  const userId = await resolveUserId(req);
 
   const result = await aiService.generateAiResult(userRequest, userId, { taskId });
 
@@ -20,7 +54,7 @@ const scheduleService = require("../services/schedule.service");
 
 const handleAiExecute = asyncHandler(async (req, res) => {
   const { userRequest, taskId } = req.body;
-  const userId = req.user.id;
+  const userId = await resolveUserId(req);
 
   // Generate AI result (this returns { output, provider, model })
   const result = await aiService.generateAiResult(userRequest, userId, { taskId });
