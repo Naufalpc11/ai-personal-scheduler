@@ -209,7 +209,8 @@ const buildUserPrompt = ({ userRequest, intent, locale, timezone, context }) => 
   // Deteksi apakah ada unsur waktu di chat user
   const isTimeMentioned = /(jam|pagi|siang|sore|malam|besok|lusa|hari ini|menit|sekarang)/i.test(text);
   // Deteksi apakah user sudah pakai kata perintah
-  const isCommandMentioned = /(buat|jadwal|atur|susun|tambah)/i.test(text);
+  // include casual verbs like 'mau', 'ingin', 'butuh' to treat informal requests as commands
+  const isCommandMentioned = /(buat|jadwal|atur|susun|tambah|mau|ingin|butuh|perlu)/i.test(text);
 
   // Kalau user nyebut waktu TAPI males ngetik perintah, baru kita suapin!
   if (isTimeMentioned && !isCommandMentioned) {
@@ -234,6 +235,39 @@ const buildUserPrompt = ({ userRequest, intent, locale, timezone, context }) => 
     null,
     2
   );
+};
+
+// Mendeteksi dan parse permintaan jadwal beruntun dari teks user secara sederhana.
+const parseSequentialFromText = (text, timezone) => {
+  const results = [];
+  const now = new Date();
+
+  // Match patterns like: "jalan-jalan jam 8 sampai jam 12" or "sholat jam 12:00 sampai 13:00"
+  const re = /([\w\s]{3,80}?)\s*(?:jam|pukul)?\s*(\d{1,2}(?::\d{2})?)\s*(?:sampai| sampai |-|to)\s*(\d{1,2}(?::\d{2})?)/gi;
+
+  let m;
+  while ((m = re.exec(text))) {
+    const rawTitle = (m[1] || '').trim();
+    const startRaw = m[2];
+    const endRaw = m[3];
+
+    // normalize times
+    const parseTime = (t) => {
+      const parts = t.split(':').map(s => parseInt(s,10));
+      const hh = parts[0];
+      const mm = parts[1] || 0;
+      const d = new Date(now);
+      d.setHours(hh, mm, 0, 0);
+      return d.toISOString();
+    };
+
+    const startIso = parseTime(startRaw);
+    const endIso = parseTime(endRaw);
+
+    results.push({ title: rawTitle || 'Aktivitas', startTime: startIso, endTime: endIso });
+  }
+
+  return results;
 };
 
 // Membuat payload prompt netral provider (messages + teks prompt mentah).
@@ -366,12 +400,185 @@ const normalizeOutput = (output, providerName, intent, fallbackUserRequest) => {
     }
   });
 
+  // --- SAFETY: split subtasks that exceed max allowed duration (480 mins)
+  const MAX_MINUTES = 480;
+  const newSubtasks = [];
+
+  output.subtasks.forEach((st, idx) => {
+    if (typeof st.estimatedMinutes === 'number' && st.estimatedMinutes > MAX_MINUTES) {
+      let remaining = st.estimatedMinutes;
+      let partIndex = 0;
+      while (remaining > 0) {
+        const take = Math.min(remaining, MAX_MINUTES);
+        newSubtasks.push({
+          title: st.title + (remaining > take ? ` (part ${partIndex + 1})` : (partIndex > 0 ? ` (part ${partIndex + 1})` : '')),
+          order: newSubtasks.length + 1,
+          estimatedMinutes: take,
+          isFlexible: st.isFlexible,
+        });
+        remaining -= take;
+        partIndex += 1;
+      }
+    } else {
+      newSubtasks.push({ ...st, order: newSubtasks.length + 1 });
+    }
+  });
+
+  output.subtasks = newSubtasks;
+
+  // If original schedulePlan existed, split it to match new subtasks sequentially
+  try {
+    if (Array.isArray(output.schedulePlan) && output.schedulePlan.length > 0) {
+      const originalPlan = output.schedulePlan[0];
+      const planStart = originalPlan.startTime ? new Date(originalPlan.startTime) : null;
+      const newPlan = [];
+
+      if (planStart && !isNaN(planStart.getTime())) {
+        let cursor = new Date(planStart);
+
+        for (const st of output.subtasks) {
+          const mins = typeof st.estimatedMinutes === 'number' ? st.estimatedMinutes : 60;
+          const startIso = cursor.toISOString();
+          const endObj = new Date(cursor);
+          endObj.setMinutes(endObj.getMinutes() + mins);
+          const endIso = endObj.toISOString();
+
+          newPlan.push({
+            subtaskTitle: st.title,
+            startTime: startIso,
+            endTime: endIso,
+            date: startIso,
+            reason: originalPlan.reason || 'Split from long subtask',
+          });
+
+          cursor = endObj;
+        }
+
+        output.schedulePlan = newPlan;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
   // 5. Jaga-jaga kalau AI nulis timezone +08:00 di constraint
   if (output.schedulingConstraints && Array.isArray(output.schedulingConstraints.preferredTimeWindows)) {
-    output.schedulingConstraints.preferredTimeWindows.forEach(tw => {
-      tw.start = forceUTC(tw.start);
-      tw.end = forceUTC(tw.end);
+    const dayMap = {
+      minggu: 'sunday',
+      senin: 'monday',
+      selasa: 'tuesday',
+      rabu: 'wednesday',
+      kamis: 'thursday',
+      jumat: 'friday',
+      "jum'at": 'friday',
+      sabtu: 'saturday',
+      sunday: 'sunday',
+      monday: 'monday',
+      tuesday: 'tuesday',
+      wednesday: 'wednesday',
+      thursday: 'thursday',
+      friday: 'friday',
+      saturday: 'saturday',
+    };
+
+    const normalizedTW = [];
+
+    output.schedulingConstraints.preferredTimeWindows.forEach((tw) => {
+      try {
+        let day = typeof tw.day === 'string' ? tw.day.trim().toLowerCase() : null;
+        if (day && dayMap[day]) {
+          day = dayMap[day];
+        } else if (day && Object.values(dayMap).includes(day)) {
+          // already english day
+          day = day;
+        } else {
+          // skip unknown day entries
+          return;
+        }
+
+        const parseTimeToHHMM = (val) => {
+          if (!val) return null;
+          // if already HH:mm
+          if (/^([01]\d|2[0-3]):[0-5]\d$/.test(val)) return val;
+          const d = new Date(forceUTC(val));
+          if (isNaN(d.getTime())) return null;
+          return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: output.timezone || 'Asia/Jakarta' });
+        };
+
+        const start = parseTimeToHHMM(tw.start);
+        const end = parseTimeToHHMM(tw.end);
+
+        if (!start || !end) return; // skip incomplete
+
+        normalizedTW.push({ day, start, end });
+      } catch (e) {
+        // ignore malformed entries
+      }
     });
+
+    output.schedulingConstraints.preferredTimeWindows = normalizedTW;
+  }
+
+  // --- SAFEGUARD: Pastikan field wajib ada untuk intent non out_of_scope
+  if (intent !== "out_of_scope") {
+    // Jika user menyebut urutan/berturut-turut dan model lupa mengisi schedulePlan,
+    // coba parse langsung dari `fallbackUserRequest` dan gunakan hasilnya.
+    if ((!Array.isArray(output.schedulePlan) || output.schedulePlan.length === 0) && /\b(lalu|setelah itu|berturut|berturut-turut|sampai)\b/i.test(fallbackUserRequest || '')) {
+      try {
+        const seq = parseSequentialFromText(fallbackUserRequest || '', output.timezone || 'Asia/Jakarta');
+        if (seq && seq.length) {
+          // build subtasks and schedulePlan from parsed sequence
+          output.subtasks = seq.map((item, idx) => ({ title: item.title || `Aktivitas ${idx+1}`, order: idx+1, estimatedMinutes: Math.max(5, Math.round((new Date(item.endTime) - new Date(item.startTime)) / 60000)), isFlexible: false }));
+          output.schedulePlan = seq.map((item) => ({ subtaskTitle: item.title || 'Aktivitas', startTime: item.startTime, endTime: item.endTime, date: item.startTime, reason: 'Parsed from user sequential request' }));
+        }
+      } catch (e) {
+        // ignore parse errors and continue with normal fallback
+      }
+    }
+    // Pastikan ada mainTask
+    if (!output.mainTask) {
+      const firstSub = output.subtasks && output.subtasks.length ? output.subtasks[0] : null;
+      output.mainTask = {
+        title: firstSub ? firstSub.title : (output.mainTask && output.mainTask.title) || "Aktivitas Utama",
+        description: (output.mainTask && output.mainTask.description) || null,
+        priority: "medium",
+        status: "pending",
+      };
+    }
+
+    // Pastikan ada schedulingConstraints
+    if (!output.schedulingConstraints) {
+      output.schedulingConstraints = {
+        deadline: null,
+        preferredTimeWindows: [],
+        fixedEvents: [],
+        maxDailyFocusMinutes: 240,
+        allowWeekend: true,
+      };
+    }
+
+    // Pastikan ada schedulePlan minimal (placeholder) agar schema lulus.
+    if (!Array.isArray(output.schedulePlan) || output.schedulePlan.length === 0) {
+      const now = new Date();
+      const d = new Date(now);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const startLocal = `${yyyy}-${mm}-${dd}T09:00:00+08:00`;
+      const duration = (output.subtasks && output.subtasks[0] && typeof output.subtasks[0].estimatedMinutes === 'number') ? output.subtasks[0].estimatedMinutes : 60;
+      const endObj = new Date(startLocal);
+      endObj.setMinutes(endObj.getMinutes() + duration);
+
+      output.schedulePlan = [
+        {
+          subtaskTitle: output.subtasks[0] ? output.subtasks[0].title : output.mainTask.title,
+          startTime: startLocal,
+          endTime: endObj.toISOString(),
+          date: startLocal,
+          reason: "Placeholder schedule because AI omitted schedulePlan",
+        },
+      ];
+    }
   }
 
   // --- LOOPING SCHEDULE PLAN (Jadikan satu di sini semua) ---
