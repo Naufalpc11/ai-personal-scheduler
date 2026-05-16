@@ -49,12 +49,22 @@ function toApiStatus(status) {
 
 function toDateOnly(isoString) {
   if (!isoString) return null
+  if (typeof isoString === 'string') {
+    const match = isoString.match(/^(\d{4}-\d{2}-\d{2})T/)
+    if (match) return match[1]
+  }
+
   const date = new Date(isoString)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function toTimeOnly(isoString) {
   if (!isoString) return ''
+  if (typeof isoString === 'string') {
+    const match = isoString.match(/T(\d{2}):(\d{2})/)
+    if (match) return `${match[1]}:${match[2]}`
+  }
+
   const date = new Date(isoString)
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
