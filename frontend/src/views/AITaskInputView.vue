@@ -55,6 +55,13 @@ const categoryColors = {
 const { token } = useAppStore()
 
 function mapIsoToTime(iso) {
+  if (typeof iso === 'string') {
+    const match = iso.match(/T(\d{2}):(\d{2})/)
+    if (match) {
+      return `${match[1]}:${match[2]}`
+    }
+  }
+
   try {
     const d = new Date(iso)
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -80,6 +87,13 @@ function calcDurationText(startIso, endIso) {
 }
 
 function mapIsoToDate(iso) {
+  if (typeof iso === 'string') {
+    const match = iso.match(/^(\d{4}-\d{2}-\d{2})T/)
+    if (match) {
+      return match[1]
+    }
+  }
+
   try {
     const d = new Date(iso)
     // Ubah ke format YYYY-MM-DD sesuai standar kalender lu
@@ -132,6 +146,8 @@ watch(isTyping, scrollToBottom)
 function handleSend(text = inputText.value) {
   const message = text.trim()
   if (!message || isTyping.value) return
+
+  error.value = ''
 
   const userId = nextId.value++
   const aiId = nextId.value++
@@ -285,7 +301,7 @@ function canSave(message) {
     <div class="mx-auto flex h-[calc(100dvh-150px)] max-w-4xl flex-col overflow-hidden rounded-[1.75rem] border border-gray-100 bg-white shadow-sm">
       <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3 lg:px-6">
         <div class="flex items-center gap-3">
-          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm">
+          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-amber-400 to-orange-500 shadow-sm">
             <Sparkles class="h-5 w-5 text-white" />
           </div>
           <div>
@@ -310,7 +326,7 @@ function canSave(message) {
       <div class="flex-1 overflow-y-auto bg-gray-50 px-4 py-4 lg:px-6">
         <div class="space-y-4">
           <div v-for="message in messages" :key="message.id" class="flex gap-3" :class="message.role === 'user' ? 'flex-row-reverse' : 'flex-row'">
-            <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-sm" :class="message.role === 'ai' ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-blue-400 to-blue-600'">
+            <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-sm" :class="message.role === 'ai' ? 'bg-linear-to-br from-amber-400 to-orange-500' : 'bg-linear-to-br from-blue-400 to-blue-600'">
               <Bot v-if="message.role === 'ai'" class="h-4 w-4 text-white" />
               <User v-else class="h-4 w-4 text-white" />
             </div>
@@ -372,7 +388,7 @@ function canSave(message) {
           </div>
 
           <div v-if="isTyping" class="flex gap-3">
-            <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm">
+            <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-amber-400 to-orange-500 shadow-sm">
               <Bot class="h-4 w-4 text-white" />
             </div>
             <div class="flex items-center gap-1.5 rounded-2xl rounded-tl-sm border border-gray-100 bg-white px-4 py-3 shadow-sm">

@@ -111,6 +111,25 @@ function toScheduleIso(date, time) {
   return local.toISOString()
 }
 
+function toScheduleIsoRange(date, startTime, endTime) {
+  const startIso = toScheduleIso(date, startTime)
+  const endLocal = new Date(`${date}T${endTime}:00`)
+
+  if (!startIso || Number.isNaN(endLocal.getTime())) {
+    return { startIso, endIso: null }
+  }
+
+  const startLocal = new Date(`${date}T${startTime}:00`)
+  let endIso = endLocal.toISOString()
+
+  if (!Number.isNaN(startLocal.getTime()) && endLocal.getTime() <= startLocal.getTime()) {
+    endLocal.setDate(endLocal.getDate() + 1)
+    endIso = endLocal.toISOString()
+  }
+
+  return { startIso, endIso }
+}
+
 export const colorMap = {
   blue: { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', dot: 'bg-blue-400', badge: 'bg-blue-500', light: 'bg-blue-50' },
   purple: { bg: 'bg-purple-100', border: 'border-purple-400', text: 'text-purple-700', dot: 'bg-purple-400', badge: 'bg-purple-500', light: 'bg-purple-50' },
@@ -159,8 +178,7 @@ export function useAppStore() {
       })
 
       const taskId = created.data?.id
-      const startIso = toScheduleIso(task.date, task.startTime)
-      const endIso = toScheduleIso(task.date, task.endTime)
+      const { startIso, endIso } = toScheduleIsoRange(task.date, task.startTime, task.endTime)
 
       if (taskId && startIso && endIso) {
         await apiRequest('/schedule', {
@@ -205,8 +223,7 @@ export function useAppStore() {
         const date = updates.date || task?.date
         const start = updates.startTime || task?.startTime
         const end = updates.endTime || task?.endTime
-        const startIso = toScheduleIso(date, start)
-        const endIso = toScheduleIso(date, end)
+        const { startIso, endIso } = toScheduleIsoRange(date, start, end)
 
         if (scheduleId && startIso && endIso) {
           await apiRequest(`/schedule/${scheduleId}`, {
