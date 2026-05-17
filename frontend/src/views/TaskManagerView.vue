@@ -79,8 +79,14 @@ const filteredTasks = computed(() => {
 })
 
 const dayStrip = computed(() => {
-  return [-3, -2, -1, 0, 1, 2, 3].map((offset) => {
-    const date = addDays(TODAY_DATE, offset)
+  const refDate = selectedDate.value || TODAY_DATE
+
+  const dayOfWeek = refDate.getDay()
+  const mondayOffset = (dayOfWeek + 6) % 7
+  const monday = addDays(refDate, -mondayOffset)
+
+  return Array.from({ length: 7 }).map((_, i) => {
+    const date = addDays(monday, i)
     const dateKey = dateToStr(date)
     return {
       date,
@@ -189,7 +195,7 @@ function countSubtask(task) {
 
         <div v-if="viewMode === 'day'" class="px-3 py-3">
           <div class="flex items-center justify-between">
-            <button class="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100" type="button" @click="selectedDate = addDays(selectedDate, -1)">
+            <button class="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100" type="button" @click="selectedDate = addDays(selectedDate, -7)">
               <ChevronLeft class="h-5 w-5" />
             </button>
 
@@ -198,16 +204,16 @@ function countSubtask(task) {
               <p class="text-xs text-blue-400">{{ dateToStr(selectedDate) === TODAY ? 'Hari ini' : 'Ketuk untuk ke hari ini' }}</p>
             </button>
 
-            <button class="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100" type="button" @click="selectedDate = addDays(selectedDate, 1)">
+            <button class="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100" type="button" @click="selectedDate = addDays(selectedDate, 7)">
               <ChevronRight class="h-5 w-5" />
             </button>
           </div>
 
-          <div class="mt-3 flex gap-1 overflow-x-auto pb-1">
+          <div class="mt-3 grid grid-cols-7 gap-1">
             <button
               v-for="day in dayStrip"
               :key="day.dateKey"
-              class="flex shrink-0 flex-col items-center gap-0.5 rounded-xl px-3 py-2 text-xs font-medium transition-all"
+              class="flex flex-col items-center gap-0.5 rounded-xl py-3 text-xs font-medium w-full"
               :class="day.isSelected ? 'bg-blue-500 text-white' : day.isToday ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'"
               type="button"
               @click="selectedDate = day.date"
@@ -216,7 +222,7 @@ function countSubtask(task) {
               <span class="text-sm font-bold">{{ day.dayNum }}</span>
               <span v-if="day.hasTask" class="h-1 w-1 rounded-full" :class="day.isSelected ? 'bg-white' : day.isToday ? 'bg-blue-400' : 'bg-slate-400'" />
             </button>
-          </div>
+            </div>
         </div>
       </AppCard>
 

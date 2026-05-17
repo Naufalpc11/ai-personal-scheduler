@@ -12,9 +12,10 @@ useRequireAuth()
 
 const { tasks } = useAppStore()
 
-const TODAY = '2026-04-21'
-const cursor = ref(new Date('2026-04-21T00:00:00'))
-const selectedDate = ref(TODAY)
+const TODAY = new Date()
+const TODAY_STR = dateToStr(TODAY)
+const cursor = ref(TODAY)
+const selectedDate = ref(TODAY_STR)
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 
 const monthLabel = computed(() => `${MONTH_NAMES[cursor.value.getMonth()]} ${cursor.value.getFullYear()}`)
@@ -42,7 +43,7 @@ const cells = computed(() => {
       day,
       keyDate: key,
       count,
-      isToday: key === TODAY,
+      isToday: key === TODAY_STR,
       isSelected: key === selectedDate.value
     })
   }
@@ -83,11 +84,11 @@ function formatDate(dateString) {
     <div class="space-y-5">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-bold text-slate-900">Jadwal</h1>
+          <h1 class="text-2xl font-bold text-slate-900">Schedule</h1>
           <p class="mt-1 text-sm text-slate-400">Kalender kegiatan</p>
         </div>
 
-        <button class="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-600" type="button" @click="selectedDate = TODAY">
+        <button class="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-600" type="button" @click="selectedDate = TODAY_STR">
           Hari Ini
         </button>
       </div>
