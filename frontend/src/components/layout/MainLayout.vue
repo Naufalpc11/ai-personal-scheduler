@@ -9,16 +9,16 @@ const router = useRouter()
 const { user, logout } = useAppStore()
 
 const menuItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Beranda', color: 'text-blue-500', activeBg: 'bg-blue-50', activeDot: 'bg-blue-500' },
+  { path: '/', icon: LayoutDashboard, label: 'Dashboard', color: 'text-blue-500', activeBg: 'bg-blue-50', activeDot: 'bg-blue-500' },
   { path: '/task-manager', icon: ListTodo, label: 'Task', color: 'text-violet-500', activeBg: 'bg-violet-50', activeDot: 'bg-violet-500' },
-  { path: '/schedule', icon: Calendar, label: 'Jadwal', color: 'text-emerald-500', activeBg: 'bg-emerald-50', activeDot: 'bg-emerald-500' },
+  { path: '/schedule', icon: Calendar, label: 'Schedule', color: 'text-emerald-500', activeBg: 'bg-emerald-50', activeDot: 'bg-emerald-500' },
   { path: '/ai-generate', icon: Sparkles, label: 'AI', color: 'text-amber-500', activeBg: 'bg-amber-50', activeDot: 'bg-amber-500' }
 ]
 
 const pageLabels = {
-  '/': 'Beranda',
+  '/': 'Dashboard',
   '/task-manager': 'Task Manager',
-  '/schedule': 'Jadwal',
+  '/schedule': 'Schedule',
   '/ai-generate': 'AI Scheduler'
 }
 
@@ -98,10 +98,6 @@ const currentUser = computed(() => user.value ?? { name: 'Guest', email: '-' })
           <span class="font-semibold text-gray-900">{{ currentPageLabel }}</span>
         </nav>
         <div class="flex items-center gap-3">
-          <button class="relative rounded-xl p-2 transition-colors hover:bg-gray-100" type="button">
-            <Bell class="h-5 w-5 text-gray-500" />
-            <span class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-          </button>
           <div class="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-1.5">
             <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 text-xs font-bold text-white">
               {{ currentUser.name.charAt(0).toUpperCase() }}
